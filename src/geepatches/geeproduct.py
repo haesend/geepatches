@@ -339,8 +339,6 @@ class GEEProduct_S1(GEEProduct, IProjectable):
         super().__init__((ee.ImageCollection('COPERNICUS/S1_GRD')
                           .filter(ee.Filter.eq('instrumentSwath', 'IW'))), verbose=verbose)
 
-        if verbose: print(f"{str(type(self).__name__)}.__init__ {geeutils.szimagecollectioninfo(self._baseeeimagecollection, verbose=False)}")
-
     def _collect(self, eeimagecollection, verbose=False):
         """
         """
