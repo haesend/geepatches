@@ -80,33 +80,35 @@ class Exporter():
     def exportpointtodrive(self, szid, eepoint, szdstfolder="geepatches", verbose=False):
         """
         """
+        retcode = 0
         if do_S1:
-            self._export_S1.exportpointtodrive(                szid, eepoint, szdstfolder, verbose=verbose)
+            if not self._export_S1.exportpointtodrive(                szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 0
         if do_S2ndvi:
-            self._export_S2ndvi.exportpointtodrive(            szid, eepoint, szdstfolder, verbose=verbose)
+            if not self._export_S2ndvi.exportpointtodrive(            szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 1
         if do_S2fapar:
-            self._export_S2fapar.exportpointtodrive(           szid, eepoint, szdstfolder, verbose=verbose)
+            if not self._export_S2fapar.exportpointtodrive(           szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 2
         if do_S2scl:
-            self._export_S2scl.exportpointtodrive(             szid, eepoint, szdstfolder, verbose=verbose)
+            if not self._export_S2scl.exportpointtodrive(             szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 3
         if do_S2sclconvmask:
-            self._export_S2sclconvmask.exportpointtodrive(     szid, eepoint, szdstfolder, verbose=verbose)
+            if not self._export_S2sclconvmask.exportpointtodrive(     szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 4
         if do_PV333Mndvi:
-            self._export_PV333Mndvi.exportpointtodrive(        szid, eepoint, szdstfolder, verbose=verbose)
+            if not self._export_PV333Mndvi.exportpointtodrive(        szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 5
         if do_PV333Msm:
-            self._export_PV333Msm.exportpointtodrive(          szid, eepoint, szdstfolder, verbose=verbose)
+            if not self._export_PV333Msm.exportpointtodrive(          szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 6
         if do_PV333Msmsimplemask:
-            self._export_PV333Msmsimplemask.exportpointtodrive(szid, eepoint, szdstfolder, verbose=verbose)
-
+            if not self._export_PV333Msmsimplemask.exportpointtodrive(szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 7
+        return exit(retcode)
 
 #
 #
 #
 def main():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname).3s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    #logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname).3s {%(pathname)s:%(filename)s:%(module)s:%(funcName)s:%(lineno)d} - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname).3s {%(module)s:%(funcName)s:%(lineno)d} - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
     szyyyycropyear   = '2019'
-    #szshapefile      = r"D:\data\ref\field_selection\test_fields_sample\2019_250testfields.shp"
-    szshapefile      = r"/data/CropSAR/data/ref/shp/testfields/2019_250testfields.shp"
+    szshapefile      = r"D:\data\ref\field_selection\test_fields_sample\2019_250testfields.shp"
+    #szshapefile      = r"/data/CropSAR/data/ref/shp/testfields/2019_250testfields.shp"
     szyyyymmddfrom   = str(int(szyyyycropyear)    )  + "-01-01" 
     szyyyymmddtill   = str(int(szyyyycropyear) + 1)  + "-01-01"
     parcelsgeodataframe = geopandas.read_file(szshapefile)
@@ -115,8 +117,8 @@ def main():
     #
     #    logging to file
     #
-    #szoutputdir     =f"D:\\tmp\\{os.path.basename(__file__)[0:-3]}"
-    szoutputdir     =r"/data/CropSAR/tmp/dominique/geebatch"
+    szoutputdir     =f"D:\\tmp\\{os.path.basename(__file__)[0:-3]}"
+    #szoutputdir     =r"/data/CropSAR/tmp/dominique/geebatch"
     szoutputbasename=os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3] + '_' + szyyyymmddfrom + '_' + szyyyymmddtill}")
     logfilehandler = logging.FileHandler(szoutputbasename + ".log")
     logfilehandler.setFormatter(logging.Formatter('%(asctime)s %(levelname).4s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
@@ -146,9 +148,8 @@ def main():
             """
             result = geeutils.wrapasprocess(
                 exporter.exportpointtodrive, 
-                args = (fieldId, eepoint, szdstfolder),
-                timeout=24*60*60, attempts=3, verbose=True) # wait one day, thanks to my greedy fellow users
-            
+                args = (fieldId, eepoint, szdstfolder, False),
+                timeout=24*60*60, attempts=3, verbose=True) # wait one day, thanks to my greedy fellow users 24*60*60
             if result:
                 logging.info(f"fieldId {fieldId}: SUCCESS {int((datetime.datetime.now()-datetime_tick).total_seconds())} seconds")
             else:

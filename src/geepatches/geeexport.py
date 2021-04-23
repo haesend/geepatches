@@ -38,6 +38,11 @@ class GEEExport(object):
     def _starttask(self, task, iattempt=0):
         """
         """
+        SLEEPTOOMUCHTASKSSECONDS = 120
+        SLEEPAFTEREXCEPTION      = 120
+        MAXACTIVETASKS           = 15
+        MAXATTEMPTS              = 2
+
         def _activertaskscount():
             taskslist       = ee.batch.Task.list()
             activetaskslist = [task for task in taskslist if task.state in (
@@ -49,18 +54,29 @@ class GEEExport(object):
             return activertaskscount
 
         try:
-            while _activertaskscount() >= 15:
+            while _activertaskscount() >= MAXACTIVETASKS:
                 print(f"{str(type(self).__name__)}._starttask: sleep a while for gee")
-                time.sleep(120)
-            print(f"{str(type(self).__name__)}._starttask({iattempt}) starting task")
+                time.sleep(SLEEPTOOMUCHTASKSSECONDS)
+            print(f"{str(type(self).__name__)}._starttask(attempt:{iattempt}): starting task")
             task.start()
+            print(f"{str(type(self).__name__)}._starttask(attempt:{iattempt}): task started")
+            return True
 
-        except:
-            print(f"{str(type(self).__name__)}._starttask({iattempt} seems to have crashed")
+        except Exception as e:
+            print(f"{str(type(self).__name__)}._starttask(attempt:{iattempt}): exception: {str(e)}")
             iattempt += 1
-            if iattempt < 5: 
-                self._wait(iattempt)
-            print(f"{str(type(self).__name__)}._starttask({iattempt} abandoned")
+            if iattempt < MAXATTEMPTS:
+                #
+                #    sleep a while, and try again.
+                #
+                time.sleep(SLEEPAFTEREXCEPTION)
+                print(f"{str(type(self).__name__)}._starttask(attempt:{iattempt-1}): exception - retry")
+                self._starttask(task, iattempt)
+            #
+            #    give it up.
+            #
+            print(f"{str(type(self).__name__)}._starttask(attempt:{iattempt}): exception - exits")
+            return False
 
 
     def _getexportimage(self, eepoint, verbose=False):
@@ -363,18 +379,25 @@ class GEEExport(object):
     def exportpointtodrive(self, szid, eepoint, szdstfolder, verbose=False):
         """
         """
-        eeimagecollectionofstacks  = self._getexportimage(eepoint, verbose=verbose)
+        verbose = True
+        eeimagecollectionofstacks  = self._getexportimage(eepoint, verbose=False)
         imageslist = eeimagecollectionofstacks.toList(eeimagecollectionofstacks.size())
         iIdx = 0
         while True:
             try:
                 exportimage = ee.Image(imageslist.get(iIdx))
+                szbandname  = exportimage.get('band').getInfo() # this will trigger the "ee.ee_exception.EEException: List.get" exception
                 #
                 #    real world batch task
                 #
+            except Exception as e:
+                if verbose: print(f"{str(type(self).__name__)}.exportpointtodrive: exported {iIdx} bands")
+                return True
+
+            try:
                 szbasefilename = str(szid) + '_' + str(type(self._geeproduct).__name__) + '_' + geeutils.szISO8601Date(self._eedatefrom) + '_' + geeutils.szISO8601Date(self._eedatetill)
-                szfilename = szbasefilename + "_" + exportimage.get('band').getInfo() # this will trigger the exception
-                if verbose : print(f"{str(type(self).__name__)}.exportpointtodrive: exporting {szfilename}")
+                szfilename = szbasefilename + "_" + szbandname
+                if verbose: print(f"{str(type(self).__name__)}.exportpointtodrive: exporting band {szbandname} to {szfilename}")
                 
                 eetask = ee.batch.Export.image.toDrive(
                     image          = exportimage,
@@ -385,10 +408,14 @@ class GEEExport(object):
                     skipEmptyTiles = False,
                     fileNamePrefix = szfilename,
                     fileFormat     = 'GeoTIFF')
-                self._starttask(eetask)
-                iIdx += 1
-            except:
-                print (f"{str(type(self).__name__)}.exportpointtodrive: exported {iIdx} bands")
-                break
+                
+                if not self._starttask(eetask):
+                    if verbose: print(f"{str(type(self).__name__)}.exportpointtodrive: abandoned. {iIdx} bands were already exported")
+                    return False
+            except Exception as e:
+                if verbose: print(f"{str(type(self).__name__)}.exportpointtodrive: exception. {iIdx} bands were already exported")
+                return False
 
-        return eeimagecollectionofstacks
+            iIdx += 1
+            pass # continue while
+

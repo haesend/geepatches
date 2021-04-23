@@ -441,7 +441,7 @@ def wrapasprocess(func, args=(), kwargs={}, *, timeout=5, attempts=1, verbose=Fa
     aim is not start multiple processes, but just to have some control over the launching of ee.Task-s, accounting for 
     gee downtime, hanging gee calls, overflowing gee task queue-s,... and own kemels.
     
-    :param func: the target function to be wrapped
+    :param func: the target function to be wrapped - this function should use exit(returncode) retrurncode = 0:success, other: fail
     :param args: the argument tuple for the target invocation. Defaults to ()
     :param kwargs: a dictionary of keyword arguments for the target invocation. Defaults to {}
     :param timeout: timeout in seconds. Defaults to 5.
@@ -480,6 +480,7 @@ def wrapasprocess(func, args=(), kwargs={}, *, timeout=5, attempts=1, verbose=Fa
             process.join(timeout)
             if not process.is_alive():
                 # in time and not alive. most probably all went well, but might have been an exception
+                print(f"wrapasprocess: attempt {attempt} exitcode: {process.exitcode}")
                 if 0 == process.exitcode:
                     # assuming success - exit
                     if verbose: print(f"wrapasprocess: attempt {attempt} SUCCESS with exitcode {process.exitcode} - in time, after {int((datetime.datetime.now()-datetime_tick).total_seconds())} seconds")
