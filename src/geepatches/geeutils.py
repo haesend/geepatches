@@ -10,6 +10,14 @@ import datetime
 import multiprocessing
 
 
+
+#########################################################
+#
+#    test purposes
+#
+#########################################################
+
+
 """
 some reference collections for test purposes
 """
@@ -113,6 +121,10 @@ faparvisParamsPalette = ['#a85000',
 
 """
 some famous points near lichtaart, mol and elsewhere for test purposes
+
+    ee.Geometry.Point(coords, proj)
+        coords: A list of two [x,y] coordinates in the given projection
+        proj: optional projection -  EPSG:4326 if unspecified.
 """
 bobspoint       = ee.Geometry.Point(4.90782, 51.20069)  # our favorite spot at Lichtaart
 hogerielenpoint = ee.Geometry.Point(4.93741, 51.24179)  # where we live
@@ -123,6 +135,42 @@ half31UESpoint  = ee.Geometry.Point(3.56472, 50.83872)  # border of S2 31UES til
 
 fleecycloudsday = ee.Date('2018-07-12')                 # schapewolkjes over Belgium
 half31UESday    = ee.Date('2020-01-29')                 # S2 31UES only upper left containing data
+
+"""
+some convenience funtions to create test images
+"""
+def _ndvi(image, sznir, szred):
+    """
+    proba V and sentinel 2 ndvi
+    """
+    return ee.Image(((image.select(sznir).subtract(image.select(szred))).divide(image.select(sznir).add(image.select(szred)))
+            .rename('NDVI')
+            .copyProperties(image, ['system:id', 'system:time_start'])))
+
+def _rvi(s1image):
+    """
+    sentinel 1 'Radar Vegetation index' 
+    """
+    vv = ee.Image(10).pow(s1image.select('VV').divide(10)) # get rid of dB's
+    vh = ee.Image(10).pow(s1image.select('VH').divide(10))
+    vh.multiply(4).divide(vh.add(vv))
+    return ee.Image((vh.multiply(4).divide(vh.add(vv))
+            .rename('RVI')
+            .copyProperties(s1image, ['system:id', 'system:time_start'])))
+
+def someS2ndviImageNear(date, eepoint=None, verbose=False):
+    return _ndvi(someImageNear(s2ImageCollection.select(['B4', 'B8']), date, eepoint, verbose=verbose),'B8','B4') # B4~Red B8~Nir
+def somePV333ndviImageNear(date, eepoint=None, verbose=False):
+    return _ndvi(someImageNear(pv333ImageCollection.select(['NIR', 'RED']), date, eepoint, verbose=verbose),'NIR','RED')
+def someS1rviImageNear(date, eepoint=None, verbose=False):
+    return _rvi(someImageNear(s1rbgImageCollection.select(['VV','VH']), date, eepoint, verbose=verbose)) # s1rbgImageCollection - guaranteed to contain both VV and VH
+
+
+#########################################################
+#
+#    actual utilities
+#
+#########################################################
 
 #
 #    utility functions
@@ -172,7 +220,8 @@ def centerpixelpoint(eepoint, eerefimage):
 
 def squareareaboundsroi(eepoint, metersradius, eeprojection=None, verbose=False):
     """
-    'square' geometry in the coordinate system of the reference image
+    'square' geometry (ee.geometry.Geometry) in the coordinate system of the specified eeprojection (may be ee.Image), 
+    or defaulting to the eepoint.projection().
     
     ee.Point.buffer(distance, maxError, proj): 
      distance:  If no projection is specified, the unit is meters. Otherwise the unit is in the coordinate system of the projection.
@@ -191,14 +240,19 @@ def squareareaboundsroi(eepoint, metersradius, eeprojection=None, verbose=False)
     """
     #
     #    get projection. default if needed
-    #    if specified via eerefimage, keep it for debug/verbose
+    #    if specified via eerefimage, keep the image for debug/verbose
     #
     eerefimage = None
     if isinstance(eeprojection, ee.Image):
         eerefimage   = eeprojection
         eeprojection = eeprojection.projection()
 
-    if eeprojection is None: eeprojection = ee.Projection('EPSG:4326')
+    if eeprojection is None:
+        #
+        # TODO: - better "ee.Projection('EPSG:4326')" ?
+        #       - should we check/modify the transform ?
+        #
+        eeprojection = eepoint.projection()
     #
     #    (default) buffer around a point, "buffering in a spherical coordinate system"
     #        will look like a circle in mercators
@@ -224,7 +278,7 @@ def squareareaboundsroi(eepoint, metersradius, eeprojection=None, verbose=False)
     #
     if verbose:
         if eerefimage is None:
-            print(f"{pathlib.Path(__file__).stem}:squareareaboundsroi({metersradius} meters) - area: {refproj_bounds.area(maxError=0.001).getInfo()}")
+            print(f"{pathlib.Path(__file__).stem}:squareareaboundsroi({metersradius} meters radius) - area: {refproj_bounds.area(maxError=0.001).getInfo()}")
         else:
             #
             #    https://developers.google.com/earth-engine/guides/reducers_reduce_region#pixels-in-the-region
@@ -574,16 +628,21 @@ def szprojectioninfo(eeproj):
         #
         # ee.Image can have multiple bands with different projections
         #
+        lenmaxszbandname = 0
+        for bandname in eeproj.bandNames().getInfo():
+            lenmaxszbandname = max(lenmaxszbandname, len(bandname))
+        lenmaxszbandname += 1
+
         sz = ''
         for iIdx, bandname in enumerate(eeproj.bandNames().getInfo()):
             sz += f"band({iIdx:3d}) "
-            sz += f"{bandname:30s}: "
+            sz += f"{bandname:{lenmaxszbandname}s}: "
             sz += szprojectioninfo(eeproj.select(iIdx).projection())
             sz += "\n"
         return sz
 
     sz  = ''
-    if   isinstance(eeproj, ee.Geometry): eeproj = eeproj.projection()
+    if  isinstance(eeproj, ee.Geometry): eeproj = eeproj.projection()
     sz += f" crs: {eeproj.crs().getInfo()}"
     sz += f" nominalScale: {eeproj.nominalScale().getInfo()}"
     sz += f" transform: {eeproj.getInfo()['transform']}" # sz += f" transform: {eeproj.transform().getInfo()}" anticipates non-affine transforms
@@ -674,6 +733,10 @@ def szestimatevaluesinfo(eeimagecollection, verbose=True):
         scale=eeimagecollection.first().select(0).projection().nominalScale(),
         bestEffort=True, tileScale=8)
 
+    lenmaxszbandname = 0    # would you believe it? 'minimum_2m_air_temperature' in 'ECMWF/ERA5/DAILY'
+    for bandname in eeimagecollection.first().bandNames().getInfo():
+        lenmaxszbandname = max(lenmaxszbandname, len(bandname))
+    lenmaxszbandname += 1
     sz = ''    
     for iIdx, bandname in enumerate(eeimagecollection.first().bandNames().getInfo()):
         xin = minpixelvalue.get(str(bandname)+'_min').getInfo()   # reduceRegion(ee.Reducer.min()) giving "None" for constant images? (hence for all small regions)
@@ -685,13 +748,51 @@ def szestimatevaluesinfo(eeimagecollection, verbose=True):
         szavg = f"{avg:15f}" if avg else f"{'none':15s}"
         szmed = f"{med:15f}" if med else f"{'none':15s}"
         sz += f"band({iIdx:3d}) "
-        sz += f"{bandname:30s}: "                                 # would you believe it? 'minimum_2m_air_temperature' in 'ECMWF/ERA5/DAILY'
+        sz += f"{bandname:{lenmaxszbandname}s}: "                                 # would you believe it? 'minimum_2m_air_temperature' in 'ECMWF/ERA5/DAILY'
         sz += f" min: {szmin} "
         sz += f" max: {szmax} "
         sz += f" avg: {szavg} "
         sz += f" med: {szmed} "
         sz +="\n"
         
+    return sz
+
+
+def szgeometryinfo(eegeometry, verbose=True):
+    """
+    wip
+    """
+    if isinstance(eegeometry, ee.Image): eegeometry = eegeometry.geometry()
+    sz  = ''
+    sz += f" geometry type: {eegeometry.type().getInfo()}"
+    sz += f" - perimeter: {eegeometry.perimeter(maxError=0.001).getInfo()}"
+    sz += f" - area: {eegeometry.area(maxError=0.001).getInfo()}"
+    #
+    #    type(eegeometry.coordinates()) -> ee.List
+    #
+    if (eegeometry.type().getInfo() == "Point"):
+        #
+        #    type(eegeometry.coordinates()) -> ee.List
+        #    type(eegeometry.coordinates().length()) -> ee.Number
+        #    eegeometry.coordinates().length().getInfo() -> 2
+        #
+        sz += f"\n\t coord: {eegeometry.coordinates().getInfo()}"
+    elif (eegeometry.type().getInfo() == "Polygon"):
+        #
+        #    type(eegeometry.coordinates()) -> ee.List
+        #    type(eegeometry.coordinates().length()) -> ee.Number
+        #    eegeometry.coordinates().length().getInfo() -> 1
+        #    type(eegeometry.coordinates().get(0)) -> ee.ComputedObject
+        #    type(eegeometry.coordinates().get(0).getInfo()) -> list
+        #
+        sz += f" - points: {len((eegeometry.coordinates().get(0).getInfo()))}"
+        for iIdx in range(len(eegeometry.coordinates().get(0).getInfo())):
+            sz += f"\n\t {iIdx}: {eegeometry.coordinates().get(0).getInfo()[iIdx]}"
+        
+    
+    sz += f"\n\t crs: {eegeometry.projection().crs().getInfo()}"
+    sz += f" nominalScale: {eegeometry.projection().nominalScale().getInfo()}"
+    sz += f"\n\t transform: {eegeometry.projection().getInfo()['transform']}"
     return sz
 
 
