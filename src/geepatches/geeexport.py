@@ -15,9 +15,10 @@ class GEEExport(object):
     def __init__(self, geeproduct, eedatefrom, eedatetill, refprodroiradius, refprodscale = 1, maxrefprodscale = 1, refproduct = None, refprodroiradunits = 'pixels'):
         """
         starts from the obscure assumption that there will be one 'more-important' GEEProduct to be exported, 
-        referred to as the reference (vet gaaf!), typically with a high resolution,
-        and that there will be exports of 'related' GEEProduct-s, which should align with the reference-ses roi as good as possible,
+        referred to as the "reference", typically with a high resolution,
+        and that there will be exports of "related" GEEProduct-s, which should align with the reference-ses roi as good as possible,
         but with a resolution of their own original order of magnitude. e.g. self-PV333m (EPSG:4326) vs ref-S2 should become an UTM of approximately 300m.
+        which can align with the S2 10m without generating too much redundant pixel data.
         :param geeproduct: instance of a GEEProduct to be exported
         :param refprodroiradius: half-size of the more-ore-less square roi
         :param refprodscale: self-projection will be the refproduct projection downscaled by this factor. e.g. self-PV333m vs ref-S2 could be 32 or 16
@@ -125,7 +126,7 @@ class GEEExport(object):
         #    at the pixel borders of the (actual) reference image, near to the eepoint for which the roi is to be exported.
         #    in the eerefimage, in its own eerefproj, the roi will be symetrical around this eerefpoint.
         #
-        eerefpoint = geeutils.centerpixelpoint(eepoint, eerefimage.reproject(eerefproj.scale(2*self._maxrefscale, 2*self._maxrefscale)))
+        eerefpoint = geeutils.pixelcenterpoint(eepoint, eerefimage.reproject(eerefproj.scale(2*self._maxrefscale, 2*self._maxrefscale)))
         if verbose: print(f"{str(type(self).__name__)}._getexportimage: eerefpoint\n {geeutils.szprojectioninfo(eerefpoint)}")
 
         if (self._refroiunits == 'meters'):
@@ -222,7 +223,7 @@ class GEEExport(object):
         #
         #    exportimage is unbounded. we'll clip it to the region specified when instantiating the GEEExport,
         #    hoping this will give results consistent with the image tif obtained via exportpointtofile/exportpointtodrive
-        #    (by clipping, its footprint and geometry seem to be updated to our region
+        #    (by clipping, its footprint and geometry seem to be updated to our region)
         #
         #         print ("- exportpoint image - footprint", exportimage.get('system:footprint').getInfo())   # None
         #         print ("- exportpoint image - geometry",  exportimage.geometry().getInfo())                # unbound ( [[[-180, -90], [180, -90]...)

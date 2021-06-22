@@ -35,7 +35,7 @@ class IProjectable(object):
 class CategoricalProjectable(IProjectable):
     def _reproject(self, eeimagecollection, eeprojection, verbose=False):
         """
-        reproject categorical collection
+        reproject categorical collection - using median
         """
         if verbose: print(f"{str(type(self).__name__)}._reproject - using Reducer.median() - ({geeutils.szprojectioninfo(eeprojection)})")
         def reproject(image):
@@ -52,7 +52,7 @@ class CategoricalProjectable(IProjectable):
 class OrdinalProjectable(IProjectable):
     def _reproject(self, eeimagecollection, eeprojection, verbose=False):
         """
-        reproject ordinal collection
+        reproject ordinal collection - using mean
         """
         if verbose: print(f"{str(type(self).__name__)}._reproject - using Reducer.mean() - ({geeutils.szprojectioninfo(eeprojection)})")
         def reproject(image):
@@ -132,7 +132,7 @@ class GEEProduct(object):
         :param eeimagecollection: ee.ImageCollection to be formatted.
         :returns: ee.ImageCollection representing the resulting data formatted to be exported to file.
         """
-        if verbose: print(f"{str(type(self).__name__)}._scaleandflag (default cast toFloat)")
+        if verbose: print(f"{str(type(self).__name__)}._scaleandflag (default implementation: cast toFloat)")
         return (eeimagecollection
                 .map(lambda image: image.toFloat()))
         

@@ -189,9 +189,9 @@ def maskimageinsidegeometry(eeimage, eegeometry):
     return eeimage.updateMask(((ee.Image(1).paint(ee.FeatureCollection(ee.Feature(eegeometry)), color=25)).eq(25)).Not())
 
 
-def centerpixelpoint(eepoint, eerefimage):
+def pixelcenterpoint(eepoint, eerefimage):
     """
-    'exact' center point of the pixel in the reference image close to the eepoint
+    center point of the pixel in the reference image close to the eepoint
 
     BEWARE: eerefimage must have one single band, or all bands must have identical projections.
     """
@@ -216,6 +216,16 @@ def centerpixelpoint(eepoint, eerefimage):
     #
     #
     return centerpoint
+
+
+def pixelinterspoint(eepoint, eerefimage):
+    """
+    intersection of pixels (raster) in the reference image close to the eepoint
+
+    BEWARE: eerefimage must have one single band, or all bands must have identical projections.
+    """
+    return (pixelcenterpoint(eepoint, eerefimage.reproject(eerefimage.projection().scale(2, 2)))
+            .transform(eerefimage.projection()))
 
 
 def squareareaboundsroi(eepoint, metersradius, eeprojection=None, verbose=False):
@@ -293,7 +303,7 @@ def squareareaboundsroi(eepoint, metersradius, eeprojection=None, verbose=False)
     return refproj_bounds
 
 
-def squarerasterboundsroi(eepoint, pixels, eeprojection, verbose=False):
+def squarerasterboundsroi(eepoint, pixelsradius, eeprojection, verbose=False):
     """
     still expecting problems - why can I work without maxError here? TODO: check (e.g. would it work on ...mosaic().projection)
 
@@ -315,7 +325,7 @@ def squarerasterboundsroi(eepoint, pixels, eeprojection, verbose=False):
     #        for pv reference images: will look like a tall oval in mercators
     #                                 will look like a circle in epsg:4326
     #
-    refproj_circle = eepoint.buffer(pixels, proj=eeprojection)
+    refproj_circle = eepoint.buffer(pixelsradius, proj=eeprojection)
     #
     #    bounds returning the bounding box of this thing in the projection of the reference image  
     #        for s2 reference images: will look like a square in mercators
