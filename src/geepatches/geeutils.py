@@ -64,8 +64,10 @@ some sample (sub) collections for test purposes
 #            '[HH, angle]'     : 396, 
 #            '[VV, VH, angle]' : 5189, 
 #            '[VV, angle]'     : 5
+#
 #    s2sclImageCollection and s2rgbImageCollection: some areas (e.g. tennvenlopoint) are covered in multiple tiles
-#    pvrgbImageCollection: world cover (hence large)
+#
+#    pvrgbImageCollection: world cover (hence large) - especially for 100m more masked than data
 #
 s1rbgImageCollection    = (s1ImageCollection
                            .filter(ee.Filter.listContains('system:band_names','VV'))
@@ -137,7 +139,7 @@ fleecycloudsday = ee.Date('2018-07-12')                 # schapewolkjes over Bel
 half31UESday    = ee.Date('2020-01-29')                 # S2 31UES only upper left containing data
 
 """
-some convenience funtions to create test images
+some convenience functions to create test images
 """
 def _ndvi(image, sznir, szred):
     """
@@ -623,9 +625,12 @@ def szimagecollectioninfo(eeimagecollection, verbose=True):
 #                                 .cat("\n"))
 #             return newinfostring
 #         sz += eeimagecollection.limit(10).iterate(iterimageinfo, ee.String('')).getInfo()
-
-        for iIdx, featuredict in enumerate(eeimagecollection.limit(10).getInfo()['features']):
+        maxfeaturestomention = 3
+        for iIdx, featuredict in enumerate(eeimagecollection.limit(maxfeaturestomention).getInfo()['features']):
             sz += f"\n    feature({iIdx}) id({featuredict.get('id', '-')})"
+        if maxfeaturestomention < imagecollectionsize:
+            sz += f"\n    ... ({imagecollectionsize-maxfeaturestomention} more)"
+            
 
 
     return sz
@@ -747,7 +752,8 @@ def szestimatevaluesinfo(eeimagecollection, verbose=True):
     for bandname in eeimagecollection.first().bandNames().getInfo():
         lenmaxszbandname = max(lenmaxszbandname, len(bandname))
     lenmaxszbandname += 1
-    sz = ''    
+    sz = 'estimate over collection'
+    sz += szimagecollectioninfo(eeimagecollection, verbose=False)
     for iIdx, bandname in enumerate(eeimagecollection.first().bandNames().getInfo()):
         xin = minpixelvalue.get(str(bandname)+'_min').getInfo()   # reduceRegion(ee.Reducer.min()) giving "None" for constant images? (hence for all small regions)
         xax = maxpixelvalue.get(str(bandname)+'_max').getInfo()   # min and max are 'reserved built-in symbol'
@@ -758,7 +764,7 @@ def szestimatevaluesinfo(eeimagecollection, verbose=True):
         szavg = f"{avg:15f}" if avg else f"{'none':15s}"
         szmed = f"{med:15f}" if med else f"{'none':15s}"
         sz += f"band({iIdx:3d}) "
-        sz += f"{bandname:{lenmaxszbandname}s}: "                                 # would you believe it? 'minimum_2m_air_temperature' in 'ECMWF/ERA5/DAILY'
+        sz += f"{bandname:{lenmaxszbandname}s}: "
         sz += f" min: {szmin} "
         sz += f" max: {szmax} "
         sz += f" avg: {szavg} "
