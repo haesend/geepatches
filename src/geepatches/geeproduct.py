@@ -10,6 +10,9 @@ import geemask
 """
 """
 class IProjectable(object):
+    """
+    By default, Earth Engine performs nearest neighbor resampling by default during reprojection.
+    """
     def _reproject(self, eeimagecollection, eeprojection, verbose=False):
         """
         depending on the nature of the (images in) the collection,
@@ -17,7 +20,7 @@ class IProjectable(object):
         selecting the median (categorical images) or by a specific algorithm (e.g. log scaled images).
 
         TODO: check that these reductions reduce to nop in case native projection.nominalScale > target projection.nominalScale
-        TODO: check that median uses existing values only
+        TODO: check that median uses existing values only - nope. doesn(t work. switching to 'mode'
         """
         #
         #    default implementation might be nearest neighbor
@@ -32,15 +35,30 @@ class IProjectable(object):
 
 """
 """
+class UserProjectable(IProjectable):
+    def _reproject(self, eeimagecollection, eeprojection, verbose=False):
+        """
+        to be implemented by daughter
+        """
+        raise NotImplementedError("Subclasses should implement this!")
+
+
+"""
+"""
 class CategoricalProjectable(IProjectable):
     def _reproject(self, eeimagecollection, eeprojection, verbose=False):
         """
-        reproject categorical collection - using median
+        reproject categorical collection - using mode
+        
+        remark: 
+        - in case a categorical image is down sampled considerably, mode is a far better method than nearest neighbor
+        - in case a categorical image is down sampled nominally, mode acts as a smoother, whereas nearest neighbor can introduce pixel shifts
+        - bottom line: no silver bullet
         """
-        if verbose: print(f"{str(type(self).__name__)}._reproject - using Reducer.median() - ({geeutils.szprojectioninfo(eeprojection)})")
+        if verbose: print(f"{str(type(self).__name__)}._reproject - using Reducer.mode() - {geeutils.szprojectioninfo(eeprojection)}")
         def reproject(image):
             return (image
-                    .reduceResolution(ee.Reducer.median(), maxPixels=4096)
+                    .reduceResolution(ee.Reducer.mode(), maxPixels=4096)
                     .reproject(eeprojection))
          
         eeimagecollection = eeimagecollection.map(reproject)
@@ -54,13 +72,378 @@ class OrdinalProjectable(IProjectable):
         """
         reproject ordinal collection - using mean
         """
-        if verbose: print(f"{str(type(self).__name__)}._reproject - using Reducer.mean() - ({geeutils.szprojectioninfo(eeprojection)})")
+        if verbose: print(f"{str(type(self).__name__)}._reproject - using Reducer.mean() - {geeutils.szprojectioninfo(eeprojection)}")
         def reproject(image):
             return (image
                     .reduceResolution(ee.Reducer.mean(), maxPixels=4096)
                     .reproject(eeprojection))
          
         eeimagecollection = eeimagecollection.map(reproject)
+        return eeimagecollection
+
+"""
+"""
+class GEECol(object):
+    """
+    The 'GEECol' class represents specific ('product') collections of images. The class contains the information and algorithms
+    needed to retrieve data from gee and calculate, convert... this data into the desired products.
+    e.g. some ndvi-GEEProduct class should be able to collect the NIR and RED data for a specific sensor from gee,
+    apply some normalizedDifference algorithm on this data.
+    
+    until further notice we'll focus on single-band (output) products
+    """
+    
+    def getcollection(self, eedatefrom, eedatetill, eepoint, roipixelsindiameter, refcollection=None, refroipixelsdiameter=None, verbose=False):
+
+        #
+        #
+        #
+        if isinstance(refcollection, ee.ImageCollection):
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: reference collection specified as ee.ImageCollection")
+            _eerefimagecollection = refcollection
+        elif isinstance(refcollection, GEECol): 
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: reference collection specified as {str(type(refcollection).__name__)}")
+            _eerefimagecollection = refcollection.collect(eepoint, eedatefrom, eedatetill, verbose=verbose)
+        else:
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: no reference collection specified")
+            _eerefimagecollection = self.collect(eepoint, eedatefrom, eedatetill, verbose=verbose)
+        #
+        # find reference image - assume single band, or all bands having identical projection
+        #
+        _eerefimage = geeutils.someImageNear(_eerefimagecollection, eedatefrom, eepoint)
+        if verbose: print(f"{str(type(self).__name__)}.getcollection: selected reference image:\n{geeutils.szprojectioninfo(_eerefimage)} id:{_eerefimage.id().getInfo()}")
+
+        #
+        # find roi center
+        #
+        if refroipixelsdiameter is not None:
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: roi diameter in reference collection pixels: {refroipixelsdiameter}")
+            _refroipixelsdiameter = refroipixelsdiameter                        # roi size in pixels of reference collection
+        else:
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: no roi diameter in reference collection pixels specified (using destination roi diameter: {roipixelsindiameter})")
+            _refroipixelsdiameter = roipixelsindiameter                         # self acting as reference
+            
+        _refroisize = round(_refroipixelsdiameter)                              #  "an integer" I said.
+        _refroisize = max(_refroisize, 1)                                       #  preferably larger then 1
+        if (_refroisize %2) == 0:                                               #  even diameter
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: selecting roi center at raster intersection")
+            _eeroicenterpoint = geeutils.pixelinterspoint(eepoint, _eerefimage) #  roi center on refimage pixels intersection
+        else:                                                                   #  odd diameter
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: selecting roi center at pixel center")
+            _eeroicenterpoint = geeutils.pixelcenterpoint(eepoint, _eerefimage) #  roi center on refimage pixel center
+        if verbose: print(f"{str(type(self).__name__)}.getcollection: selected roi center:\n{geeutils.szgeometryinfo(_eeroicenterpoint)}")
+        #
+        # find actual roi -  roi radius for odd sizes: 1, 2, 3, ... - for even sizes: 0.5, 1.5, 2.5, ...
+        #
+        _eerefroi = geeutils.squarerasterboundsroi(_eeroicenterpoint, _refroisize/2, _eerefimage, verbose=verbose)
+        if verbose: print(f"{str(type(self).__name__)}.getcollection: selected roi:\n{geeutils.szgeometryinfo(_eerefroi)}")
+        #
+        # find roi origin to translate to align pixel boundaries with reference roi
+        #
+        _eerefroiulx  = _eerefroi.coordinates().flatten().get(0)
+        _eerefroiuly  = _eerefroi.coordinates().flatten().get(1)
+        #
+        # translate and scale reference projection
+        #
+        _eedstprojection = _eerefimage.projection().translate(_eerefroiulx, _eerefroiuly)
+        _eedstprojection = _eedstprojection.scale(_refroipixelsdiameter/roipixelsindiameter, _refroipixelsdiameter/roipixelsindiameter)
+        if verbose: print(f"{str(type(self).__name__)}.getcollection: destination projection roi:\n{geeutils.szprojectioninfo(_eedstprojection)}")
+        #
+        # find native image collection
+        #
+        _eenatimagecollection = self.collect(_eerefroi, eedatefrom, eedatetill, verbose=verbose)
+        if _eenatimagecollection is None:
+            print(f"{str(type(self).__name__)}.getcollection: destination collection is empty - bailing out")
+            return None
+        #
+        # reproject it, to align pixel boundaries with reference roi
+        #
+        _eedstimagecollection = self._reproject(_eenatimagecollection, _eedstprojection, verbose=verbose)
+        #
+        #
+        #
+        if True:
+            #
+            #    store intermediates so client can retrieve them for debugging
+            #
+            self._eerefimagecollection = _eerefimagecollection
+            self._eerefimage           = _eerefimage
+            self._refroipixelsdiameter = _refroipixelsdiameter
+            self._refroisize           = _refroisize
+            self._eeroicenterpoint     = _eeroicenterpoint
+            self._eerefroi             = _eerefroi
+            self._eerefroiulx          = _eerefroiulx
+            self._eerefroiuly          = _eerefroiuly
+            self._eedstprojection      = _eedstprojection
+            self._eenatimagecollection = _eenatimagecollection
+            self._eedstimagecollection = _eedstimagecollection
+        #
+        #
+        #
+        return _eedstimagecollection
+
+
+"""
+"""
+class GEEUserProjectableCol(GEECol, UserProjectable):
+    pass
+
+
+"""
+"""
+class GEECategoricalProjectableCol(GEECol, CategoricalProjectable):
+    pass
+
+
+"""
+"""
+class GEEOrdinalProjectableCol(GEECol, OrdinalProjectable):
+    pass
+
+
+"""
+"""
+class GEECol_s2ndvi(GEEOrdinalProjectableCol):
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+
+        eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
+                             .select(['B4', 'B8'])                               # B4~Red B8~Nir
+                             .filterBounds(eeroi)
+                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        
+        def ndvi(image):
+            return ((image.select('B8').subtract(image.select('B4'))).divide(image.select('B8').add(image.select('B4')))
+                    .rename('NDVI')
+                    .copyProperties(image, ['system:id', 'system:time_start']))
+        eeimagecollection = eeimagecollection.map(ndvi)
+        
+        return eeimagecollection
+
+"""
+"""
+class GEECol_s2fapar(GEEOrdinalProjectableCol):
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+
+        eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
+                             .select(['B3', 'B4', 'B8'])
+                             .filterBounds(eeroi)
+                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        
+        def fapar(image):
+            return (geebiopar.get_s2fapar3band(image)
+                    .rename('FAPAR')
+                    .copyProperties(image, ['system:id', 'system:time_start']))
+        eeimagecollection = eeimagecollection.map(fapar)
+        
+        return eeimagecollection
+
+
+"""
+"""
+class GEECol_s2scl(GEECategoricalProjectableCol):
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+
+        eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
+                             .select(['SCL'])
+                             .filterBounds(eeroi)
+                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        
+        return eeimagecollection
+
+
+"""
+"""
+class GEECol_s2sclsclconvmask(GEECategoricalProjectableCol):
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+
+        eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
+                             .select(['SCL'])
+                             .filterBounds(eeroi)
+                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
+
+        def convmask(image):
+            return (geemask.ConvMask( [[2, 4, 5, 6, 7], [3, 8, 9, 10, 11]], [20*9, 20*101], [-0.057, 0.025] )
+                    .makemask(image)
+                    .unmask(255, False)  # sameFootprint=False: otherwise missing beyond footprint becomes 0
+                    .toUint8()           # uint8 [0:not masked, 1:masked], no data: 255)
+                    .rename('MASK')
+                    .copyProperties(image, ['system:id', 'system:time_start']))
+        eeimagecollection = eeimagecollection.map(convmask)
+
+        return eeimagecollection
+
+
+"""
+"""
+class GEECol_s2rgb(GEEOrdinalProjectableCol):
+    """
+    experimental - just for the fun of it (to check where multiband images give problems)
+    
+    https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S2_SR
+    - doesn't bother to give minimum and maximum values of the bands
+    - their sample snippet hacks around with the quality bands to reduce clouds, and then ***.divide(10000)*** - this gives a hint?
+    
+    https://sentinel.esa.int/web/sentinel/user-guides/sentinel-2-msi/definitions
+    - tells something about TCI bands
+        'The TCI is an RGB image built from the B02 (Blue), B03 (Green), and B04 (Red) Bands. 
+        The reflectances are coded between 1 and 255, 0 being reserved for 'No Data'. 
+        The saturation level of 255 digital counts correspond to a level of 3558 for L1C products 
+        or 2000 for L2A products (0.3558 and 0.2 in reflectance value respectively.'
+        
+        GEE collection seems to have replaced this 'No Data' by masking it.
+
+    - Sentinel-2 Products Specification Document (issue 14.6 16/03/2021) page 425:
+        'The conversion formulae to apply to image Digital Numbers (DN) to obtain physical values is:
+        Reflectance (float) = DC / (QUANTIFICATION_VALUE)
+        Note that the reflectance meaningful values go from "1" to "65535" as "0" is reserved for the NO_DATA.
+
+        problem: ...DN...DC... ???
+        problem: QUANTIFICATION_VALUE not found in GEE
+        
+    https://gis.stackexchange.com/questions/233874/what-is-the-range-of-values-of-sentinel-2-level-2a-images
+    - refers to "Level 2A Product Format Specifications Technical Note"
+    - which is nowhere to be found (anymore?)
+    - but claims that once upon a time, there might have been 
+        - a formulae: Surface reflectance SR = DN / 10000.
+        - a comment: spectacular effects on surface or clouds could lead to values higher than 1.0
+        
+    """
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+
+#         eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
+#                              .select(['B4', 'B3', 'B2'])
+#                              .filterBounds(eeroi)
+#                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        
+        eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
+                             .select(['TCI_R', 'TCI_G', 'TCI_B'])
+                             .filterBounds(eeroi)
+                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        return eeimagecollection
+
+
+"""
+"""
+class GEECol_s1sigma0(GEEUserProjectableCol):
+
+    def __init__(self, szband):
+        
+        if not szband in ['VV', 'VH', 'HV', 'HH']:
+            raise ValueError()
+        self.szband = szband
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+
+        eeimagecollection = (ee.ImageCollection('COPERNICUS/S1_GRD')
+                             .filter(ee.Filter.eq('instrumentSwath', 'IW'))
+                             .filter(ee.Filter.listContains('system:band_names', self.szband))
+                             .filter(ee.Filter.listContains('system:band_names','angle'))          # actually, I think this thing is always there.
+                             .select([self.szband])
+                             .filterBounds(eeroi)
+                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        
+        return eeimagecollection
+
+    def _reproject(self, eeimagecollection, eeprojection, verbose=False):
+        """
+        reproject the collection - for S1 we need to convert and reconvert from/to dB
+        """
+        def undodbprojredodb(image):
+            return (ee.Image(10.0).pow(image.divide(10.0))
+                    .reduceResolution(ee.Reducer.mean(), maxPixels=4096)
+                    .reproject(eeprojection)
+                    .log10().multiply(10.0)
+                    .rename(image.bandNames()) # gotcha: eeimagecollection 2 bands: no problem, 1 band: name becomes 'constant': "The output bands are named for the longer of the two inputs, or if they're equal in length, in image1's order."
+                    .copyProperties(image)
+                    .copyProperties(image, ['system:id', 'system:time_start']))
+        eeimagecollection = eeimagecollection.map(undodbprojredodb)
+
+        return eeimagecollection
+
+
+"""
+"""
+class GEECol_s1gamma0(GEECol_s1sigma0):
+
+    def __init__(self, szband):
+        super().__init__(szband)        
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        #
+        #    override GEECol_s1sigma0.collect to convert sigma to gamma
+        #    problem is that we need the 'angle' - will be dropped during conversion
+        #
+        eeimagecollection = (ee.ImageCollection('COPERNICUS/S1_GRD')
+                             .filter(ee.Filter.eq('instrumentSwath', 'IW'))
+                             .filter(ee.Filter.listContains('system:band_names', self.szband))
+                             .filter(ee.Filter.listContains('system:band_names','angle'))
+                             .filterBounds(eeroi)
+                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #
+        #
+        def sigme0dbtogamma0db(image):
+            """
+            gamma0 = sigma0 / cos(t)   with t in radians = angle(degrees) x pi / 180
+            => 10 x log(gamma0) = 10 x log(sigma0) - 10 x log(cos(t))\
+            => gamma0_db = sigma0_db - 10 x log(cos(t))
+            """
+            return (image.select(self.szband)
+                    .subtract(image.select('angle').multiply(3.1415/180.0).cos().log10().multiply(10.))
+                    .copyProperties(image)
+                    .copyProperties(image, ['system:id', 'system:time_start']))
+        eeimagecollection = eeimagecollection.map(sigme0dbtogamma0db)
+        
+        return eeimagecollection
+
+
+"""
+"""
+class GEECol_s1rvi(GEEOrdinalProjectableCol):
+    """
+    """
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+
+        eeimagecollection = (ee.ImageCollection('COPERNICUS/S1_GRD_FLOAT')
+                             .filter(ee.Filter.eq('instrumentSwath', 'IW'))
+                             .filter(ee.Filter.listContains('system:band_names', 'VV'))
+                             .filter(ee.Filter.listContains('system:band_names', 'VH'))
+                             .filterBounds(eeroi)
+                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
+
+        def rvi(image):
+            vv  = image.select('VV')
+            vh  = image.select('VH')
+            rvi = vh.multiply(4).divide(vh.add(vv))
+            return ee.Image(rvi.rename('RVI').copyProperties(image, ['system:id', 'system:time_start']))
+        eeimagecollection = eeimagecollection.map(rvi)
+
+        return eeimagecollection
+
+
+"""
+"""
+class GEECol_pv333ndvi(GEEOrdinalProjectableCol):
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+
+        eeimagecollection = (ee.ImageCollection('VITO/PROBAV/C1/S1_TOC_333M')
+                             .select(['NIR', 'RED'])
+                             .filterBounds(eeroi)
+                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        
+        def ndvi(image):
+            return ((image.select('NIR').subtract(image.select('RED'))).divide(image.select('NIR').add(image.select('RED')))
+                    .rename('NDVI')
+                    .copyProperties(image, ['system:id', 'system:time_start']))
+        eeimagecollection = eeimagecollection.map(ndvi)
+        
         return eeimagecollection
 
 

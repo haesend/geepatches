@@ -152,10 +152,10 @@ def _ndvi(image, sznir, szred):
 def _rvi(s1image):
     """
     sentinel 1 'Radar Vegetation index' 
+    https://custom-scripts.sentinel-hub.com/custom-scripts/sentinel-1/radar_vegetation_index/
     """
     vv = ee.Image(10).pow(s1image.select('VV').divide(10)) # get rid of dB's
     vh = ee.Image(10).pow(s1image.select('VH').divide(10))
-    vh.multiply(4).divide(vh.add(vv))
     return ee.Image((vh.multiply(4).divide(vh.add(vv))
             .rename('RVI')
             .copyProperties(s1image, ['system:id', 'system:time_start'])))
@@ -344,10 +344,10 @@ def squarerasterboundsroi(eepoint, pixelsradius, eeprojection, verbose=False):
     #
     if verbose:
         if eerefimage is None:
-            print(f"{pathlib.Path(__file__).stem}:squarerasterboundsroi({pixels} pixels radius) - area: {refproj_bounds.area(maxError=0.001).getInfo()}")
+            print(f"{pathlib.Path(__file__).stem}:squarerasterboundsroi({pixelsradius} pixels radius) - area: {refproj_bounds.area(maxError=0.001).getInfo()}")
         else:
             pixelcount = eerefimage.select(0).unmask(sameFootprint=False).reduceRegion(ee.Reducer.count(), refproj_bounds)
-            print(f"{pathlib.Path(__file__).stem}:squarerasterboundsroi({pixels} pixels radius) - area: {refproj_bounds.area(maxError=0.001).getInfo()} - covering {pixelcount.getInfo()} pixels in ref image")
+            print(f"{pathlib.Path(__file__).stem}:squarerasterboundsroi({pixelsradius} pixels radius) - area: {refproj_bounds.area(maxError=0.001).getInfo()} - covering {pixelcount.getInfo()} pixels in ref image")
     #
     #
     #
@@ -627,6 +627,10 @@ def szimagecollectioninfo(eeimagecollection, verbose=True):
 #         sz += eeimagecollection.limit(10).iterate(iterimageinfo, ee.String('')).getInfo()
         maxfeaturestomention = 3
         for iIdx, featuredict in enumerate(eeimagecollection.limit(maxfeaturestomention).getInfo()['features']):
+            #
+            #    mind you: ee.image.id() gives only the last part of ee.image.get('id'...)
+            #    e.g.: '20180712' vs 'VITO/PROBAV/C1/S1_TOC_333M/20180712'
+            #
             sz += f"\n    feature({iIdx}) id({featuredict.get('id', '-')})"
         if maxfeaturestomention < imagecollectionsize:
             sz += f"\n    ... ({imagecollectionsize-maxfeaturestomention} more)"
@@ -650,7 +654,7 @@ def szprojectioninfo(eeproj):
 
         sz = ''
         for iIdx, bandname in enumerate(eeproj.bandNames().getInfo()):
-            sz += f"band({iIdx:3d}) "
+            sz += f" band({iIdx:3d}) "
             sz += f"{bandname:{lenmaxszbandname}s}: "
             sz += szprojectioninfo(eeproj.select(iIdx).projection())
             sz += "\n"
@@ -781,8 +785,8 @@ def szgeometryinfo(eegeometry, verbose=True):
     if isinstance(eegeometry, ee.Image): eegeometry = eegeometry.geometry()
     sz  = ''
     sz += f" geometry type: {eegeometry.type().getInfo()}"
-    sz += f" - perimeter: {eegeometry.perimeter(maxError=0.001).getInfo()}"
-    sz += f" - area: {eegeometry.area(maxError=0.001).getInfo()}"
+    #sz += f" - perimeter: {eegeometry.perimeter(maxError=0.001).getInfo()}"
+    #sz += f" - area: {eegeometry.area(maxError=0.001).getInfo()}"
     #
     #    type(eegeometry.coordinates()) -> ee.List
     #
@@ -794,6 +798,8 @@ def szgeometryinfo(eegeometry, verbose=True):
         #
         sz += f"\n\t coord: {eegeometry.coordinates().getInfo()}"
     elif (eegeometry.type().getInfo() == "Polygon"):
+        sz += f" - perimeter: {eegeometry.perimeter(maxError=0.001).getInfo()}"
+        sz += f" - area: {eegeometry.area(maxError=0.001).getInfo()}"
         #
         #    type(eegeometry.coordinates()) -> ee.List
         #    type(eegeometry.coordinates().length()) -> ee.Number
