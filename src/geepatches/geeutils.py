@@ -354,23 +354,102 @@ def squarerasterboundsroi(eepoint, pixelsradius, eeprojection, verbose=False):
     return refproj_bounds
 
 
-def mosaictodate(eeimagecollection, verbose=False):
+# def mosaictodate(eeimagecollection, verbose=False):
+#     """
+#     mosaic images of same day.
+#         this is no max or mean composite; overlapping (but non masked) area's will get the value of one image.
+#         e.g. case where a geometry intersects multiple sentinel 2 tiles. crude.
+# 
+#     ee.ImageCollection.mosaic():
+#         Composites all the images in a collection, using the mask.
+#         mosaic() composites overlapping images according to their order in the collection (last on top). 
+#         To control the source of pixels in a mosaic (or a composite), use image masks.
+#     
+#     BEWARE: 
+#         result is unbounded (print(image.geometry().getInfo()) gives [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]])
+#         result will get the properties of the first image in the collection
+#     """
+#     #
+#     #    sort: to be sure of a reproducable projection - add day-granular 'date' as property
+#     #
+#     eeimagecollection = eeimagecollection.sort('system:time_start').map(lambda image: image.set('date', ee.Date(image.date().format('YYYY-MM-dd'))))
+#     #
+#     #    map-able list of distinct dates 
+#     #
+#     eelistdistinctdates = ee.List(eeimagecollection.distinct('date').aggregate_array('date'))
+#     #
+#     #    reference projection from earliest image in the collection - we might be at an UTM-border 
+#     #    use first band to avoid problems in special case of multiband products with different resolutions - expected to be used for testcases only.
+#     #
+#     eeprojectionreference = eeimagecollection.first().select(0).projection()
+#     
+#     if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate input collection: \n{szimagecollectioninfo(eeimagecollection)}")
+#    
+#     def _mosaic(eedate):
+#         thisdate            = ee.Date(eedate)
+#         thisdatescollection = eeimagecollection.filter(ee.Filter.date(thisdate, thisdate.advance(1, 'day')))
+#         thisdatesmosaic     = (thisdatescollection
+#                                .mosaic()
+#                                .reproject(eeprojectionreference)
+#                                .set('date', thisdate.format('YYYY-MM-dd'))
+#                                .copyProperties(thisdatescollection.first())                                      # properties from first image
+#                                .copyProperties(thisdatescollection.first(), ['system:id', 'system:time_start'])) # including 'system:id' - ambiguous indeed
+#         return thisdatesmosaic
+# 
+#     eeimagecollection = ee.ImageCollection(eelistdistinctdates.map(lambda eedate: _mosaic(eedate)))
+# 
+#     if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate result collection: \n{szimagecollectioninfo(eeimagecollection)}")
+#     
+#     return eeimagecollection
+
+
+def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
     """
-    mosaic images of same day.
-        this is no max or mean composite; overlapping (but non masked) area's will get the value of one image.
-        e.g. case where a geometry intersects multiple sentinel 2 tiles. crude.
+    mosaic images of same date (day).
+        composite type can be specified as one of 'mean', 'max', 'min', 'mode' or 'mosaic' (default) 
 
     ee.ImageCollection.mosaic():
         Composites all the images in a collection, using the mask.
         mosaic() composites overlapping images according to their order in the collection (last on top). 
         To control the source of pixels in a mosaic (or a composite), use image masks.
-    
+
+        this is no real composite; overlapping (but non masked) area's will get the value of one image.
+        e.g. case where a geometry intersects multiple sentinel 2 tiles. crude.
+
+    ee.ImageCollection.mode():
+        Reduces an image collection by calculating the most common value at each pixel across the stack of all matching bands. Bands are matched by name.
+
+    ee.ImageCollection.mean/median/max/min():
+        Reduces an image collection by calculating the mean/median/max/min of all values at each pixel across the stack of all matching bands.
+
     BEWARE: 
         result is unbounded (print(image.geometry().getInfo()) gives [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]])
         result will get the properties of the first image in the collection
     """
+    def _mosaicdaily_method_mosaic(eeimagecollection): return eeimagecollection.mosaic()
+    def _mosaicdaily_method_mean(eeimagecollection):   return eeimagecollection.mean()
+    def _mosaicdaily_method_max(eeimagecollection):    return eeimagecollection.max()
+    def _mosaicdaily_method_min(eeimagecollection):    return eeimagecollection.min()
+    def _mosaicdaily_method_mode(eeimagecollection):   return eeimagecollection.mode()
+    """
+    BEWARE: 
+        result is unbounded (print(image.geometry().getInfo()) gives [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]])
+    """
     #
-    #    sort: to be sure of a reproducable projection - add day-granular 'date' as property
+    #
+    #
+    if szmethod is None: szmethod = "mosaic"
+    
+    if   szmethod == "mosaic": _method=_mosaicdaily_method_mosaic
+    elif szmethod == "mean":   _method=_mosaicdaily_method_mean
+    elif szmethod == "max":    _method=_mosaicdaily_method_max
+    elif szmethod == "min":    _method=_mosaicdaily_method_min
+    elif szmethod == "mode":   _method=_mosaicdaily_method_mode
+    else: 
+        raise ValueError("szmethod must be specified as one of 'mosaic', 'mean', 'max', 'min', 'mode'")
+
+    #
+    #    sort: to be sure of a reproducable collection - add day-granular 'date' as property ( format('YYYY-MM-dd') takes care of 'day-granular')
     #
     eeimagecollection = eeimagecollection.sort('system:time_start').map(lambda image: image.set('date', ee.Date(image.date().format('YYYY-MM-dd'))))
     #
@@ -379,26 +458,24 @@ def mosaictodate(eeimagecollection, verbose=False):
     eelistdistinctdates = ee.List(eeimagecollection.distinct('date').aggregate_array('date'))
     #
     #    reference projection from earliest image in the collection - we might be at an UTM-border 
-    #    use first band to avoid problems in special case of multiband products with different resolutions - expected to be used for testcases only.
+    #    use first band to avoid problems in special case of multiband products with different resolutions(expected to be used for testcases only.)
     #
     eeprojectionreference = eeimagecollection.first().select(0).projection()
     
-    if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate input collection: \n{szimagecollectioninfo(eeimagecollection)}")
+    if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) input collection: \n{szimagecollectioninfo(eeimagecollection)}")
    
     def _mosaic(eedate):
         thisdate            = ee.Date(eedate)
-        thisdatescollection = eeimagecollection.filter(ee.Filter.date(thisdate, thisdate.advance(1, 'day')))
-        thisdatesmosaic     = (thisdatescollection
-                               .mosaic()
+        thisdatescollection = eeimagecollection.filter(ee.Filter.date(thisdate, thisdate.advance(1,'day')))
+        thisdatesmosaic     = (_mosaicdaily_method_mosaic(thisdatescollection)
                                .reproject(eeprojectionreference)
                                .set('date', thisdate.format('YYYY-MM-dd'))
-                               .copyProperties(thisdatescollection.first())                                      # properties from first image
-                               .copyProperties(thisdatescollection.first(), ['system:id', 'system:time_start'])) # including 'system:id' - ambiguous indeed
+                               .copyProperties(thisdatescollection.first(), ['system:time_start']))
         return thisdatesmosaic
 
     eeimagecollection = ee.ImageCollection(eelistdistinctdates.map(lambda eedate: _mosaic(eedate)))
 
-    if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate result collection: \n{szimagecollectioninfo(eeimagecollection)}")
+    if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) result collection: \n{szimagecollectioninfo(eeimagecollection)}")
     
     return eeimagecollection
 
@@ -605,10 +682,12 @@ def szimagecollectioninfo(eeimagecollection, verbose=True):
     if eeimagecollection.first().get('system:time_start').getInfo() is None:
         sz += " from/till: 'system:time_start' not found - not date info available. \n"
     else:
-        eeimagecollection = eeimagecollection.sort('system:time_start')
+        eeimagecollection = (eeimagecollection
+                             .sort('system:time_start')
+                             .map(lambda image: image.set('date', ee.Date(image.date().format('YYYY-MM-dd')))))
         sz += f" from: {eeimagecollection.limit(1, 'system:time_start', True).first().date().format('YYYY-MM-dd').getInfo()}"
         sz += f" till: {eeimagecollection.limit(1, 'system:time_start', False).first().date().format('YYYY-MM-dd').getInfo()}"
-        sz += f"\n"
+        #sz += f"\n"
 
     
     if verbose:
@@ -625,7 +704,7 @@ def szimagecollectioninfo(eeimagecollection, verbose=True):
 #                                 .cat("\n"))
 #             return newinfostring
 #         sz += eeimagecollection.limit(10).iterate(iterimageinfo, ee.String('')).getInfo()
-        maxfeaturestomention = 3
+        maxfeaturestomention = 4
         for iIdx, featuredict in enumerate(eeimagecollection.limit(maxfeaturestomention).getInfo()['features']):
             #
             #    mind you: ee.image.id() gives only the last part of ee.image.get('id'...)
@@ -658,7 +737,7 @@ def szprojectioninfo(eeproj):
             sz += f"{bandname:{lenmaxszbandname}s}: "
             sz += szprojectioninfo(eeproj.select(iIdx).projection())
             sz += "\n"
-        return sz
+        return sz[:-1]
 
     sz  = ''
     if  isinstance(eeproj, ee.Geometry): eeproj = eeproj.projection()
@@ -758,6 +837,7 @@ def szestimatevaluesinfo(eeimagecollection, verbose=True):
     lenmaxszbandname += 1
     sz = 'estimate over collection'
     sz += szimagecollectioninfo(eeimagecollection, verbose=False)
+    sz += "\n"
     for iIdx, bandname in enumerate(eeimagecollection.first().bandNames().getInfo()):
         xin = minpixelvalue.get(str(bandname)+'_min').getInfo()   # reduceRegion(ee.Reducer.min()) giving "None" for constant images? (hence for all small regions)
         xax = maxpixelvalue.get(str(bandname)+'_max').getInfo()   # min and max are 'reserved built-in symbol'

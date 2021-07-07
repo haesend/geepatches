@@ -81,6 +81,7 @@ class OrdinalProjectable(IProjectable):
         eeimagecollection = eeimagecollection.map(reproject)
         return eeimagecollection
 
+
 """
 """
 class GEECol(object):
@@ -90,7 +91,9 @@ class GEECol(object):
     e.g. some ndvi-GEEProduct class should be able to collect the NIR and RED data for a specific sensor from gee,
     apply some normalizedDifference algorithm on this data.
     
-    until further notice we'll focus on single-band (output) products
+    until further notice we'll focus on 
+    - single-band (output) products
+    - with minimum periodicity of 1 day
     """
     
     def getcollection(self, eedatefrom, eedatetill, eepoint, roipixelsindiameter, refcollection=None, refroipixelsdiameter=None, verbose=False):
@@ -185,101 +188,112 @@ class GEECol(object):
 
 """
 """
-class GEEUserProjectableCol(GEECol, UserProjectable):
-    pass
-
-
-"""
-"""
-class GEECategoricalProjectableCol(GEECol, CategoricalProjectable):
-    pass
-
-
-"""
-"""
-class GEEOrdinalProjectableCol(GEECol, OrdinalProjectable):
-    pass
-
-
-"""
-"""
-class GEECol_s2ndvi(GEEOrdinalProjectableCol):
+class GEECol_s2ndvi(GEECol, OrdinalProjectable):
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
-
+        #
+        #    base collection
+        #
         eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
                              .select(['B4', 'B8'])                               # B4~Red B8~Nir
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
-        
+        #
+        #    apply ndvi = (nir-red)/(nir+red)
+        #
         def ndvi(image):
             return ((image.select('B8').subtract(image.select('B4'))).divide(image.select('B8').add(image.select('B4')))
                     .rename('NDVI')
                     .copyProperties(image, ['system:id', 'system:time_start']))
         eeimagecollection = eeimagecollection.map(ndvi)
-        
+        #
+        #    apply maximum composite in case of overlapping images on same day
+        #
+        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="max", verbose=verbose)        
+
         return eeimagecollection
 
 """
 """
-class GEECol_s2fapar(GEEOrdinalProjectableCol):
+class GEECol_s2fapar(GEECol, OrdinalProjectable):
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
-
+        #
+        #    base collection
+        #
         eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
                              .select(['B3', 'B4', 'B8'])
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
-        
+        #
+        #    apply fapar network
+        #
         def fapar(image):
             return (geebiopar.get_s2fapar3band(image)
                     .rename('FAPAR')
                     .copyProperties(image, ['system:id', 'system:time_start']))
         eeimagecollection = eeimagecollection.map(fapar)
-        
+        #
+        #    apply maximum composite in case of overlapping images on same day
+        #
+        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="max", verbose=verbose)
+        #
+        #
+        #
         return eeimagecollection
 
 
 """
 """
-class GEECol_s2scl(GEECategoricalProjectableCol):
+class GEECol_s2scl(GEECol, CategoricalProjectable):
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
-
+        #
+        #    base collection
+        #
         eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
                              .select(['SCL'])
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
-        
+        #
+        #    apply mode composite in case of overlapping images on same day
+        #
+        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="mode", verbose=verbose)
+        #
+        #
+        #
         return eeimagecollection
 
 
 """
 """
-class GEECol_s2sclsclconvmask(GEECategoricalProjectableCol):
+class GEECol_s2sclsclconvmask(GEECol_s2scl):
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
-
-        eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
-                             .select(['SCL'])
-                             .filterBounds(eeroi)
-                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
-
+        #
+        #    base collection: SCL from parent - already composited (daily) to avoid striping at overlaps
+        #
+        eeimagecollection = super().collect(eeroi, eedatefrom, eedatetill, verbose=verbose)
+        #
+        #
+        #
         def convmask(image):
             return (geemask.ConvMask( [[2, 4, 5, 6, 7], [3, 8, 9, 10, 11]], [20*9, 20*101], [-0.057, 0.025] )
                     .makemask(image)
                     .unmask(255, False)  # sameFootprint=False: otherwise missing beyond footprint becomes 0
                     .toUint8()           # uint8 [0:not masked, 1:masked], no data: 255)
                     .rename('MASK')
-                    .copyProperties(image, ['system:id', 'system:time_start']))
+                    .copyProperties(image, ['system:time_start']))
         eeimagecollection = eeimagecollection.map(convmask)
-
+        #
+        #    no composite/composite - already done in base collection
+        #
         return eeimagecollection
 
 
 """
 """
-class GEECol_s2rgb(GEEOrdinalProjectableCol):
+class GEECol_s2rgb(GEECol, OrdinalProjectable):
     """
     experimental - just for the fun of it (to check where multiband images give problems)
     
@@ -319,35 +333,63 @@ class GEECol_s2rgb(GEEOrdinalProjectableCol):
 #                              .select(['B4', 'B3', 'B2'])
 #                              .filterBounds(eeroi)
 #                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
-        
+        #
+        #    using the mystic TCI bands
+        #       
         eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
                              .select(['TCI_R', 'TCI_G', 'TCI_B'])
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #    apply median composite in case of overlapping images on same day
+        #    could be refined (e.g. select value with max ndvi) but worldcover 
+        #     uses median too, and this is just an experimental class anyway.
+        #
         return eeimagecollection
 
 
 """
 """
-class GEECol_s1sigma0(GEEUserProjectableCol):
+class GEECol_s1sigma0(GEECol, UserProjectable):
 
-    def __init__(self, szband):
+    def __init__(self, szband, szorbitpass):
         
         if not szband in ['VV', 'VH', 'HV', 'HH']:
-            raise ValueError()
+            raise ValueError("band must be specified as one of 'VV', 'VH', 'HV', 'HH'")
         self.szband = szband
 
-    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        if not szorbitpass in ['ASCENDING', 'DESCENDING']:
+            raise ValueError("band must be specified as one of 'ASCENDING', 'DESCENDING'")
+        self.szorbitpass = szorbitpass
 
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        #
+        #    base collection - limited to single band & single orbit direction
+        #
         eeimagecollection = (ee.ImageCollection('COPERNICUS/S1_GRD')
                              .filter(ee.Filter.eq('instrumentSwath', 'IW'))
                              .filter(ee.Filter.listContains('system:band_names', self.szband))
-                             .filter(ee.Filter.listContains('system:band_names','angle'))          # actually, I think this thing is always there.
-                             .select([self.szband])
+                             .filter(ee.Filter.eq('orbitProperties_pass', self.szorbitpass))
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
-        
+        #
+        #    just the selected band
+        #
+        eeimagecollection = eeimagecollection.select([self.szband])
+        #
+        #    apply mosaic in case of multiple images in roi (on same day) since
+        #    - I don't have a clue what is 'should' be (mean, median, ...?)
+        #    - S1 images do not seem to overlap
+        #    - so we only need this step for roi's at edges
+        #    - worldcereal/worldcover has been using plain mosaic from start
+        #    - and it doen't need the everlasting from-to-db
+        #
+        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="mosaic", verbose=verbose)
+        #
+        #
+        #
         return eeimagecollection
+
 
     def _reproject(self, eeimagecollection, eeprojection, verbose=False):
         """
@@ -370,22 +412,23 @@ class GEECol_s1sigma0(GEEUserProjectableCol):
 """
 class GEECol_s1gamma0(GEECol_s1sigma0):
 
-    def __init__(self, szband):
-        super().__init__(szband)        
+    def __init__(self, szband, szorbitpass):
+        super().__init__(szband, szorbitpass)        
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
-        #    override GEECol_s1sigma0.collect to convert sigma to gamma
-        #    problem is that we need the 'angle' - will be dropped during conversion
+        #    can't use GEECol_s1sigma0.collect to convert sigma to gamma:
+        #    problem is that we do need the 'angle' - will be dropped later
         #
         eeimagecollection = (ee.ImageCollection('COPERNICUS/S1_GRD')
                              .filter(ee.Filter.eq('instrumentSwath', 'IW'))
                              .filter(ee.Filter.listContains('system:band_names', self.szband))
                              .filter(ee.Filter.listContains('system:band_names','angle'))
+                             .filter(ee.Filter.eq('orbitProperties_pass', self.szorbitpass))
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
         #
-        #
+        #    gamma = f(sigma)
         #
         def sigme0dbtogamma0db(image):
             """
@@ -398,55 +441,83 @@ class GEECol_s1gamma0(GEECol_s1sigma0):
                     .copyProperties(image)
                     .copyProperties(image, ['system:id', 'system:time_start']))
         eeimagecollection = eeimagecollection.map(sigme0dbtogamma0db)
-        
+        #
+        #    apply plain mosaic in case of multiple images in roi (on same day)
+        #
+        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="mosaic", verbose=verbose)
+        #
+        #
+        #
         return eeimagecollection
 
 
 """
 """
-class GEECol_s1rvi(GEEOrdinalProjectableCol):
+class GEECol_s1rvi(GEECol, OrdinalProjectable):
     """
+    experimental - just for the fun of it (to play with S1_GRD_FLOAT collection)
     """
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
-
+        #
+        #    base collection - using S1_GRD_FLOAT collection
+        #    TODO: limited to single orbit direction?
+        #
         eeimagecollection = (ee.ImageCollection('COPERNICUS/S1_GRD_FLOAT')
                              .filter(ee.Filter.eq('instrumentSwath', 'IW'))
                              .filter(ee.Filter.listContains('system:band_names', 'VV'))
                              .filter(ee.Filter.listContains('system:band_names', 'VH'))
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
-
+        #
+        #    apply rvi = 4 x VH / (VV + VH)
+        #
         def rvi(image):
             vv  = image.select('VV')
             vh  = image.select('VH')
             rvi = vh.multiply(4).divide(vh.add(vv))
             return ee.Image(rvi.rename('RVI').copyProperties(image, ['system:id', 'system:time_start']))
         eeimagecollection = eeimagecollection.map(rvi)
-
+        #
+        #    apply maximum composite in case of overlapping images on same day. TODO: is this ok?
+        #
+        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="max", verbose=verbose)        
+        #
+        #
+        #
         return eeimagecollection
 
 
 """
 """
-class GEECol_pv333ndvi(GEEOrdinalProjectableCol):
+class GEECol_pv333ndvi(GEECol, OrdinalProjectable):
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
-
+        #
+        #    base collection
+        #
         eeimagecollection = (ee.ImageCollection('VITO/PROBAV/C1/S1_TOC_333M')
                              .select(['NIR', 'RED'])
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
-        
+        #
+        #    apply ndvi = (nir-red)/(nir+red)
+        #
         def ndvi(image):
             return ((image.select('NIR').subtract(image.select('RED'))).divide(image.select('NIR').add(image.select('RED')))
                     .rename('NDVI')
                     .copyProperties(image, ['system:id', 'system:time_start']))
         eeimagecollection = eeimagecollection.map(ndvi)
-        
+        #
+        #    no sense in mosaicing: S1_TOC_333M is global
+        #
         return eeimagecollection
 
 
+
+#
+#    TODO: remove below
+#
 """
 """
 class GEEProduct(object):
