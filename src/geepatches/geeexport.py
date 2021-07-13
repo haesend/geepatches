@@ -9,6 +9,524 @@ import time
 import math
 
 
+
+"""
+"""
+class GEEExp(object):
+    """
+    """
+
+    def _getcommonexportparams(self, eeimagecollection, verbose=False):
+        """
+        """
+        #
+        # GEECol imagecollections are supposed to have these properties available
+        #
+        eeregion     = ee.Geometry(eeimagecollection.get('gee_refroi'))
+        eeprojection = ee.Projection(eeimagecollection.get('gee_projection'))
+        #
+        # everlasting war between pixel_as_surface vs pixel_as_point: 
+        #    - export seems to use 'pixel_as_point'
+        #    - our roi represents the pixel_as_surface bounding box
+        #    - rounding errors can introduce an extra row/column in our exported image
+        #    => shinking the original roi with 10% of its own pixel size and prayer might take care of this
+        #
+        exportregion = eeregion.buffer(-0.1, proj=eeprojection)
+        exportscale  = eeprojection.nominalScale()
+        #
+        # description used in filenames
+        #
+        szcollectiondescription = eeimagecollection.get('gee_description').getInfo()
+        #
+        # enable loop over bandnames - normal GEECol collections are expected to be single-band - but just in case
+        #
+        szbandnames = eeimagecollection.aggregate_array('system:band_names').flatten().distinct().getInfo()
+        #
+        #
+        #
+        return exportregion, exportscale, szcollectiondescription, szbandnames
+
+
+    def _starteetask(self, task, iattempt=0):
+        """
+        """
+
+        SLEEPTOOMUCHTASKSSECONDS = 120
+        SLEEPAFTEREXCEPTION      = 120
+        MAXACTIVETASKS           = 15
+        MAXATTEMPTS              = 2
+
+        def _activertaskscount():
+            taskslist       = ee.batch.Task.list()
+            activetaskslist = [task for task in taskslist if task.state in (
+                ee.batch.Task.State.READY,
+                ee.batch.Task.State.RUNNING,
+                ee.batch.Task.State.CANCEL_REQUESTED)]
+            activertaskscount = len(activetaskslist)
+            print(f"{str(type(self).__name__)}._starttask._activertaskscount: {activertaskscount} tasks active")
+            return activertaskscount
+
+        try:
+            while _activertaskscount() >= MAXACTIVETASKS:
+                print(f"{str(type(self).__name__)}._starttask: sleep a while for gee")
+                time.sleep(SLEEPTOOMUCHTASKSSECONDS)
+            print(f"{str(type(self).__name__)}._starttask(attempt:{iattempt}): starting task")
+            task.start()
+            print(f"{str(type(self).__name__)}._starttask(attempt:{iattempt}): task started")
+            return True
+
+        except Exception as e:
+            print(f"{str(type(self).__name__)}._starttask(attempt:{iattempt}): exception: {str(e)}")
+            iattempt += 1
+            if iattempt < MAXATTEMPTS:
+                #
+                #    sleep a while, and try again.
+                #
+                time.sleep(SLEEPAFTEREXCEPTION)
+                print(f"{str(type(self).__name__)}._starttask(attempt:{iattempt-1}): exception - retry")
+                self._starttask(task, iattempt)
+            #
+            #    give it up.
+            #
+            print(f"{str(type(self).__name__)}._starttask(attempt:{iattempt}): exception - exits")
+            return False        
+
+    
+    def exportseparateimages(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
+        """
+        """
+        #
+        # filenames filenames... I hate filenames...
+        # - normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
+        # - verfify the path is an existing directory
+        #
+        szoutputdir = os.path.normpath(szoutputdir)
+        if not os.path.isdir(szoutputdir) :
+            raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+        #
+        #
+        #
+        exportregion, exportscale, szcollectiondescription, szbandnames = self._getcommonexportparams(eeimagecollection, verbose=verbose)
+        #
+        #
+        #
+        for szbandname in szbandnames:
+            collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
+            collectionsize = collection.size().getInfo()
+        
+            if verbose: print(f"{str(type(self).__name__)}.exportseparateimages - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
+    
+            #
+            # export each image in the collection separately - seems to take a lot of time.
+            #
+            eelist = eeimagecollection.toList(collection.size())
+            for iIdx in range(collection.size().getInfo()):
+                eeimage     = ee.Image(eelist.get(iIdx))
+                #
+                # filenames again; 
+                #    using weird ".yyyymmdd.tif" to get same filenames as exportimagestacks, where 'file_per_band' rules.
+                #
+                szyyyymmdd  = geeutils.szISO8601Date(eeimage.get('gee_date'))
+                if 1 < len(szbandnames):
+                    # multi band images (exceptional)
+                    szfilename  = os.path.join(szoutputdir, f"exportseparateimages_{szfilenameprefix}_{szcollectiondescription}_{szbandname}.{szyyyymmdd}.tif")
+                else:
+                    # single band images (expected)
+                    szfilename  = os.path.join(szoutputdir, f"exportseparateimages_{szfilenameprefix}_{szcollectiondescription}.{szyyyymmdd}.tif")
+                geemap.ee_export_image(
+                    eeimage,
+                    filename = szfilename,
+                    scale    = exportscale,
+                    region   = exportregion,
+                    file_per_band=False)
+    
+    
+    def exportimagestacks(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
+        """
+        """
+        #
+        # - normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
+        # - verfify the path is an existing directory
+        #
+        szoutputdir = os.path.normpath(szoutputdir)
+        if not os.path.isdir(szoutputdir) :
+            raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+        #
+        #
+        #
+        exportregion, exportscale, szcollectiondescription, szbandnames = self._getcommonexportparams(eeimagecollection, verbose=verbose)
+        #
+        #
+        #
+        for szbandname in szbandnames:
+            collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
+            collectionsize = collection.size().getInfo()
+        
+            if verbose: print(f"{str(type(self).__name__)}.exportimagestacks - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
+    
+            offset = 0
+            while offset < collectionsize:
+                eelist  = collection.toList(100, offset)
+                offset += 100
+                print(eelist.size().getInfo())
+                #
+                # stack multiple single-band images into single multi-band image - exports faster than separate images
+                #
+                def addimagebandstostack(nextimage, previousstack):
+                    nextimage = ee.Image(nextimage)
+                    return ee.Image(previousstack).addBands(nextimage.rename(nextimage.date().format('YYYY-MM-dd')))
+                stackedimage = ee.Image(eelist.iterate(addimagebandstostack, ee.Image().select()))
+        
+                #
+                # filenames - again
+                #    file_per_band = True will create separate images per band, thereby appending .bandname to the filename parameter
+                #    => files will be: szfilename.bandname.tif
+                #
+                if 1 < len(szbandnames):
+                    # multi band images collection (exceptional)
+                    szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}_{szbandname}.tif")
+                else:
+                    # single band images collection (expected)
+                    szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}.tif")
+                geemap.ee_export_image(
+                    stackedimage,
+                    filename      = szfilename,
+                    scale         = exportscale,
+                    region        = exportregion,
+                    file_per_band = True)
+    
+    
+    """
+    """
+    def exportimagestackstodrive(self, eeimagecollection, szfilenameprefix="", verbose=False):
+        #
+        #    TODO - folder
+        #
+#         #
+#         # - normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
+#         # - verfify the path is an existing directory
+#         #
+#         szoutputdir = os.path.normpath(szoutputdir)
+#         if not os.path.isdir(szoutputdir) :
+#             raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+        #
+        #
+        #
+        exportregion, exportscale, szcollectiondescription, szbandnames = self._getcommonexportparams(eeimagecollection, verbose=verbose)
+        #
+        #
+        #
+        for szbandname in szbandnames:
+            collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
+            collectionsize = collection.size().getInfo()
+        
+            if verbose: print(f"{str(type(self).__name__)}.exportimagestackstodrive - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
+
+            #
+            #    TODO: are there limits to number of bands in export to drive?
+            #
+            def addimagebandstostack(nextimage, previousstack):
+                nextimage = ee.Image(nextimage)
+                return ee.Image(previousstack).addBands(nextimage.rename(nextimage.date().format('YYYY-MM-dd')))
+            stackedimage = ee.Image(collection.iterate(addimagebandstostack, ee.Image().select()))
+
+            if 1 < len(szbandnames):
+                # multi band images collection (exceptional)
+                szfilename  = f"{szfilenameprefix}{szcollectiondescription}_{szbandname}"
+            else:
+                # single band images collection (expected)
+                szfilename  = f"{szfilenameprefix}{szcollectiondescription}"
+
+            eetask = ee.batch.Export.image.toDrive(
+                image          = stackedimage,
+                region         = exportregion,
+                description    = szfilename,
+                folder         = f"geepatches_{szcollectiondescription}",
+                scale          = exportscale,
+                skipEmptyTiles = False,
+                fileNamePrefix = szfilename,
+                fileFormat     = 'GeoTIFF')
+
+            if not self._starteetask(eetask):
+                if verbose: print(f"{str(type(self).__name__)}.exportimagestackstodrive: abandoned.")
+                return False
+
+
+# 
+# 
+# """
+# """
+# def _getexportparams(eeimagecollection, szoutputdir, verbose=False):
+#     #
+#     # filenames filenames... I hate filenames...
+#     # - normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
+#     # - verfify the path is an existing directory
+#     #
+#     szoutputdir = os.path.normpath(szoutputdir)
+#     if not os.path.isdir(szoutputdir) :
+#         raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+#     
+#     #
+#     # GEECol imagecollections are supposed to have these properties available
+#     #
+#     eeregion     = ee.Geometry(eeimagecollection.get('gee_refroi'))
+#     eeprojection = ee.Projection(eeimagecollection.get('gee_projection'))
+#     #
+#     # everlasting war between pixel_as_surface vs pixel_as_point: 
+#     #    - export seems to use 'pixel_as_point'
+#     #    - our roi represents the pixel_as_surface bounding box
+#     #    - rounding errors can introduce an extra row/column in our exported image
+#     #    => shinking the original roi with 10% of its own pixel size and prayer might take care of this
+#     #
+#     exportregion = eeregion.buffer(-0.1, proj=eeprojection)
+#     exportscale  = eeprojection.nominalScale()
+#     #
+#     # description used in filenames
+#     #
+#     szcollectiondescription = eeimagecollection.get('gee_description').getInfo()
+#     #
+#     # enable loop over bandnames - normal GEECol collections are expected to be single-band - but just in case
+#     #
+#     szbandnames = eeimagecollection.aggregate_array('system:band_names').flatten().distinct().getInfo()
+#     #
+#     #
+#     #
+#     return szoutputdir, exportregion, exportscale, szcollectiondescription, szbandnames
+#     
+# """
+# """
+# def exportseparateimages(eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
+#     #
+#     #
+#     #
+#     szoutputdir, exportregion, exportscale, szcollectiondescription, szbandnames = _getexportparams(eeimagecollection, szoutputdir, verbose=verbose)
+# #     #
+# #     # filenames filenames... I hate filenames...
+# #     # - normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
+# #     # - verfify the path is an existing directory
+# #     #
+# #     szoutputdir = os.path.normpath(szoutputdir)
+# #     if not os.path.isdir(szoutputdir) :
+# #         raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+# #     
+# #     #
+# #     # GEECol imagecollections are supposed to have these properties available
+# #     #
+# #     eeregion     = ee.Geometry(eeimagecollection.get('gee_refroi'))
+# #     eeprojection = ee.Projection(eeimagecollection.get('gee_projection'))
+# #     #
+# #     # everlasting war between pixel_as_surface vs pixel_as_point: 
+# #     #    - export seems to use 'pixel_as_point'
+# #     #    - our roi represents the pixel_as_surface bounding box
+# #     #    - rounding errors can introduce an extra row/column in our exported image
+# #     #    => shinking the original roi with 10% of its own pixel size and prayer might take care of this
+# #     #
+# #     exportregion = eeregion.buffer(-0.1, proj=eeprojection)
+# #     exportscale  = eeprojection.nominalScale()
+# #     #
+# #     # loop over bandnames - normal GEECol collections are expected to be single-band - but just in case
+# #     #
+# #     szbandnames = eeimagecollection.aggregate_array('system:band_names').flatten().distinct().getInfo()
+# 
+#     for szbandname in szbandnames:
+#         collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
+#         collectionsize = collection.size().getInfo()
+#     
+#         print(f"collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
+# 
+#         #
+#         # export each image in the collection separately - seems to take a lot of time.
+#         #
+#         eelist = eeimagecollection.toList(collection.size())
+#         for iIdx in range(collection.size().getInfo()):
+#             eeimage     = ee.Image(eelist.get(iIdx))
+#             #
+#             # filenames - again
+#             #
+#             szyyyymmdd  = geeutils.szISO8601Date(eeimage.get('gee_date'))
+#             if 1 < len(szbandnames):
+#                 # multi band images (exceptional)
+#                 szfilename  = os.path.join(szoutputdir, f"exportseparateimages_{szfilenameprefix}_{szcollectiondescription}_{szbandname}.{szyyyymmdd}.tif")
+#             else:
+#                 # single band images (expected)
+#                 szfilename  = os.path.join(szoutputdir, f"exportseparateimages_{szfilenameprefix}_{szcollectiondescription}.{szyyyymmdd}.tif")
+#             geemap.ee_export_image(
+#                 eeimage,
+#                 filename = szfilename,
+#                 scale    = exportscale,
+#                 region   = exportregion,
+#                 file_per_band=False)
+# 
+# 
+# """
+# """
+# def exportimagestacks(eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
+#     #
+#     #
+#     #
+#     szoutputdir, exportregion, exportscale, szcollectiondescription, szbandnames = _getexportparams(eeimagecollection, szoutputdir, verbose=verbose)
+# #     #
+# #     # filenames filenames... I hate filenames...
+# #     # - normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
+# #     # - verfify the path is an existing directory
+# #     #
+# #     szoutputdir = os.path.normpath(szoutputdir)
+# #     if not os.path.isdir(szoutputdir) :
+# #         raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+# #     
+# #     #
+# #     # GEECol imagecollections are supposed to have these properties available
+# #     #
+# #     eeregion     = ee.Geometry(eeimagecollection.get('gee_refroi'))
+# #     eeprojection = ee.Projection(eeimagecollection.get('gee_projection'))
+# #     #
+# #     # everlasting war between pixel_as_surface vs pixel_as_point: 
+# #     #    - export seems to use 'pixel_as_point'
+# #     #    - our roi represents the pixel_as_surface bounding box
+# #     #    - rounding errors can introduce an extra row/column in our exported image
+# #     #    => shinking the original roi with 10% of its own pixel size and prayer might take care of this
+# #     #
+# #     exportregion = eeregion.buffer(-0.1, proj=eeprojection)
+# #     exportscale  = eeprojection.nominalScale()
+# #     #
+# #     # loop over bandnames - normal GEECol collections are expected to be single-band - but just in case
+# #     #
+# #     szbandnames = eeimagecollection.aggregate_array('system:band_names').flatten().distinct().getInfo()
+# 
+#     
+#     for szbandname in szbandnames:
+#         collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
+#         collectionsize = collection.size().getInfo()
+#     
+#         print(f"collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
+# 
+#         offset = 0
+#         while offset < collectionsize:
+#             eelist  = collection.toList(100, offset)
+#             offset += 100
+#             print(eelist.size().getInfo())
+#             #
+#             # stack multiple single-band images into single multi-band image - exports faster than separate images
+#             #
+#             def addimagebandstostack(nextimage, previousstack):
+#                 nextimage = ee.Image(nextimage)
+#                 return ee.Image(previousstack).addBands(nextimage.rename(nextimage.date().format('YYYY-MM-dd')))
+#             stackedimage = ee.Image(eelist.iterate(addimagebandstostack, ee.Image().select()))
+#             print(stackedimage.bandNames().getInfo())
+#     
+#             #
+#             # filenames - again
+#             #
+#             if 1 < len(szbandnames):
+#                 # multi band images collection (exceptional)
+#                 szfilename  = os.path.join(szoutputdir, f"exportimagestacks_{szfilenameprefix}_{szcollectiondescription}_{szbandname}.tif")
+#             else:
+#                 # single band images collection (expected)
+#                 szfilename  = os.path.join(szoutputdir, f"exportimagestacks_{szfilenameprefix}_{szcollectiondescription}.tif")
+#             geemap.ee_export_image(
+#                 stackedimage,
+#                 filename      = szfilename,
+#                 scale         = exportscale,
+#                 region        = exportregion,
+#                 file_per_band = True)
+
+
+
+"""
+"""
+def export(eeimagecollection):
+    #
+    #
+    #
+    eeregion = eeimagecollection.get('region')
+
+    eelist = eeimagecollection.toList(eeimagecollection.size())
+    for iIdx in range(eeimagecollection.size().getInfo()):
+        eeimage  = ee.Image(eelist.get(iIdx))
+        
+        imageslist = eeimagecollectionofstacks.toList(eeimagecollectionofstacks.size())
+        for iIdx in range(eeimagecollectionofstacks.size().getInfo()):
+            exportimage = ee.Image(imageslist.get(iIdx))
+            exportband  = exportimage.get('band').getInfo()
+            eeregion    = ee.Geometry(exportimage.get('region'))
+            geemap.ee_export_image(
+                exportimage,
+                filename=szfilename, 
+                scale=exportimage.projection().nominalScale(),   # this scale only will determine the pixel size of the ***exported*** image
+                region=exportregion, file_per_band=False)        # the ***exported*** region which is just a teeny-tiny bit smaller than it should be.
+
+            #
+            #    and Yet Again: Terminal Touching pixels will be exported. Shinking the original roi with 1% of its pixel size... and pray.
+            #    TODO: implement in exportpointtodrive too
+            #
+            exportregion = eeregion.buffer(-0.01, proj=exportimage.projection())
+            if verbose:
+                eeregionpixelcount     = exportimage.select(0).unmask(sameFootprint=False).reduceRegion(ee.Reducer.count(), eeregion)
+                exportregionpixelcount = exportimage.select(0).unmask(sameFootprint=False).reduceRegion(ee.Reducer.count(), exportregion)
+                print(f"{str(type(self).__name__)}.exportpointtofile (earliest image band {exportband} in stack):")
+                print(f"- actual region: {geeutils.szprojectioninfo(eeregion)}")
+                print(f"- area: {eeregion.area(maxError=0.001).getInfo()}")
+                print(f"- covering {eeregionpixelcount.getInfo()} pixels in src image")
+                print(f"- export region: {geeutils.szprojectioninfo(exportregion)}")
+                print(f"- area: {exportregion.area(maxError=0.001).getInfo()}")
+                print(f"- covering {exportregionpixelcount.getInfo()} pixels in src image")
+            #
+            #    exportpointtofile is mainly for debug; works only for few bands ( < 100 ), small files, fast processes 
+            #
+            szfilename = szbasefilename + "_" + exportband + ".tif"
+            geemap.ee_export_image(
+                exportimage,
+                filename=szfilename, 
+                scale=exportimage.projection().nominalScale(),   # this scale only will determine the pixel size of the ***exported*** image
+                region=exportregion, file_per_band=False)        # the ***exported*** region which is just a teeny-tiny bit smaller than it should be.
+            #
+            #    some nursing due to quirks in ee.Image.getDownloadURL (current versions: ee 0.1.248, gee 0.8.12) 
+            #    
+            try:
+                import osgeo.gdal
+                src_ds = osgeo.gdal.Open(szfilename)
+                dst_ds = src_ds.GetDriver().CreateCopy(szfilename + ".tmp.tif", src_ds)
+                #
+                #    restore band descriptions which are mysteriously lost in the ee.Image.getDownloadURL (current versions: ee 0.1.248, gee 0.8.12)
+                #
+                lstbandnames = exportimage.bandNames().getInfo()
+                for iband in range(src_ds.RasterCount):
+                    dst_ds.GetRasterBand(iband+1).SetDescription(lstbandnames[iband])
+                #
+                #    qgis chokes on '-inf' which is default for masked values in Float32 and Float64 images (current versions: ee 0.1.248, gee 0.8.12)
+                #
+                datatype = dst_ds.GetRasterBand(1).DataType
+                if (datatype == osgeo.gdalconst.GDT_Float32) or (datatype == osgeo.gdalconst.GDT_Float64):
+                    rasterArray = dst_ds.GetRasterBand(iband+1).ReadAsArray()
+                    rasterArray[rasterArray == -math.inf] = math.nan
+                    dst_ds.GetRasterBand(iband+1).WriteArray(rasterArray)
+                    dst_ds.GetRasterBand(iband+1).SetNoDataValue(math.nan)
+                    
+                dst_ds = None
+                src_ds = None
+                os.remove(szfilename)
+                os.rename(szfilename + ".tmp.tif", szfilename)
+    
+            except Exception as e:
+                #
+                #    happens all the time e.g. some file is open in qgis
+                #
+                print(f"{str(type(self).__name__)}.exportpointtofile: updating band names FAILED with exception: {str(e)}")
+                pass
+    
+            #
+            #    debug. export the shape file of the eeregion (and exportregion) too.
+            #
+            if verbose:                                          # yes. verbose. yes. if I verbose, I am debugging, ain't I?
+                geemap.ee_to_shp(
+                    ee.FeatureCollection([ee.Feature(eeregion), ee.Feature(exportregion)]),
+                    szfilename[0:-4] + ".shp")
+        #
+        #
+        #
+        return eeimagecollectionofstacks
+
+
 """
 """
 class GEEExport(object):

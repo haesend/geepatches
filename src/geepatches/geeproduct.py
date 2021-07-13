@@ -21,6 +21,7 @@ class IProjectable(object):
 
         TODO: check that these reductions reduce to nop in case native projection.nominalScale > target projection.nominalScale
         TODO: check that median uses existing values only - nope. doesn(t work. switching to 'mode'
+        TODO: should we split ordinal images further into mean, median, ... ? S1 will always be UserProjectable, but what with rgb's?
         """
         #
         #    default implementation might be nearest neighbor
@@ -94,9 +95,45 @@ class GEECol(object):
     until further notice we'll focus on 
     - single-band (output) products
     - with minimum periodicity of 1 day
-    """
     
+    GEECol <---+--- GEECol_s2ndvi
+               +--- GEECol_s2fapar
+               +--- GEECol_s2scl
+               +--- GEECol_s2sclconvmask
+               +--- GEECol_s2rgb            (test)
+               +--- GEECol_s1sigma0
+               +--- GEECol_s1gamma0
+               +--- GEECol_s1rvi            (test)
+               +--- GEECol_pv333ndvi
+               +--- ...
+    """
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        """
+        - selects the ee.ImageCollection(s) needed to create the product
+        - filters the collections to the specified roi and dates range
+        - applies the product specific algorithm (e.g.: ndvi = (nir-red)/(nir+red))
+        - applies mosaicing/compositing if needed:
+            - e.g. in case of collections with tiled images where a roi intersects with multiple tiles (Sentinel-1)
+            - e.g. in case of collections with overlapping images where points in the roi have multiple values (Sentinel-2)
+            - uses a mosaicing/compositing algorithm type appropriate to the product (e.g.: ndvi and fapar typically 'max' composite)
+            - assumes a minimum periodicity of 1 day for the output product, hence mosaicing/compositing is applied on images of the same date yyyymmdd
+        - add collection properties describing this collection
+        - returns the product as single band ee.Imagecollection with distinct dates (excluding testcases and experiments)
+
+        :param eeroi: ee.Geometry describing the region of interest (typically an ee.Geometry.Point or a ('square') ee.Geometry.Polygon)
+        :param eedatefrom: ee.Date - earliest date included in the product
+        :param eedatetill: ee.Date - earliest date NOT-included in the product
+        :returns: ee.ImageCollection
+        """
+        #
+        #    to be implemented by daughter
+        #
+        raise NotImplementedError("Subclasses should implement this!")
+    
+
     def getcollection(self, eedatefrom, eedatetill, eepoint, roipixelsindiameter, refcollection=None, refroipixelsdiameter=None, verbose=False):
+        """
+        """
 
         #
         #
@@ -120,25 +157,28 @@ class GEECol(object):
         # find roi center
         #
         if refroipixelsdiameter is not None:
-            if verbose: print(f"{str(type(self).__name__)}.getcollection: roi diameter in reference collection pixels: {refroipixelsdiameter}")
-            _refroipixelsdiameter = refroipixelsdiameter                        # roi size in pixels of reference collection
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: specified roi diameter in reference collection pixels: {refroipixelsdiameter}")
+            pass                                                                          # roi size in pixels of reference collection
         else:
             if verbose: print(f"{str(type(self).__name__)}.getcollection: no roi diameter in reference collection pixels specified (using destination roi diameter: {roipixelsindiameter})")
-            _refroipixelsdiameter = roipixelsindiameter                         # self acting as reference
+            refroipixelsdiameter = roipixelsindiameter                                    # self acting as reference
             
-        _refroisize = round(_refroipixelsdiameter)                              #  "an integer" I said.
-        _refroisize = max(_refroisize, 1)                                       #  preferably larger then 1
-        if (_refroisize %2) == 0:                                               #  even diameter
-            if verbose: print(f"{str(type(self).__name__)}.getcollection: selecting roi center at raster intersection")
+        _refroipixelsdiameter = round(refroipixelsdiameter)                               #  "an integer" I said.
+        _refroipixelsdiameter = max(_refroipixelsdiameter, 1)                             #  preferably larger then 1
+        if verbose and (_refroipixelsdiameter != refroipixelsdiameter):
+            print(f"{str(type(self).__name__)}.getcollection: specified roi diameter in reference collection pixels ({refroipixelsdiameter}) modified to {_refroipixelsdiameter}")
+
+        if (_refroipixelsdiameter %2) == 0:                                               #  even diameter
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: selecting roi center at reference collection pixels raster intersection")
             _eeroicenterpoint = geeutils.pixelinterspoint(eepoint, _eerefimage) #  roi center on refimage pixels intersection
         else:                                                                   #  odd diameter
-            if verbose: print(f"{str(type(self).__name__)}.getcollection: selecting roi center at pixel center")
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: selecting roi center at reference collection pixel center")
             _eeroicenterpoint = geeutils.pixelcenterpoint(eepoint, _eerefimage) #  roi center on refimage pixel center
         if verbose: print(f"{str(type(self).__name__)}.getcollection: selected roi center:\n{geeutils.szgeometryinfo(_eeroicenterpoint)}")
         #
         # find actual roi -  roi radius for odd sizes: 1, 2, 3, ... - for even sizes: 0.5, 1.5, 2.5, ...
         #
-        _eerefroi = geeutils.squarerasterboundsroi(_eeroicenterpoint, _refroisize/2, _eerefimage, verbose=verbose)
+        _eerefroi = geeutils.squarerasterboundsroi(_eeroicenterpoint, _refroipixelsdiameter/2, _eerefimage, verbose=verbose)
         if verbose: print(f"{str(type(self).__name__)}.getcollection: selected roi:\n{geeutils.szgeometryinfo(_eerefroi)}")
         #
         # find roi origin to translate to align pixel boundaries with reference roi
@@ -148,8 +188,13 @@ class GEECol(object):
         #
         # translate and scale reference projection
         #
+        _roipixelsindiameter = round(roipixelsindiameter)                              #  "an integer" I said.
+        _roipixelsindiameter = max(_roipixelsindiameter, 1)                            #  preferably larger then 1
+        if verbose and (_roipixelsindiameter != roipixelsindiameter):
+            print(f"{str(type(self).__name__)}.getcollection: specified roi diameter in destination collection pixels ({roipixelsindiameter}) modified to {_roipixelsindiameter}")
+        
         _eedstprojection = _eerefimage.projection().translate(_eerefroiulx, _eerefroiuly)
-        _eedstprojection = _eedstprojection.scale(_refroipixelsdiameter/roipixelsindiameter, _refroipixelsdiameter/roipixelsindiameter)
+        _eedstprojection = _eedstprojection.scale(_refroipixelsdiameter/_roipixelsindiameter, _refroipixelsdiameter/_roipixelsindiameter)
         if verbose: print(f"{str(type(self).__name__)}.getcollection: destination projection roi:\n{geeutils.szprojectioninfo(_eedstprojection)}")
         #
         # find native image collection
@@ -172,14 +217,19 @@ class GEECol(object):
             self._eerefimagecollection = _eerefimagecollection
             self._eerefimage           = _eerefimage
             self._refroipixelsdiameter = _refroipixelsdiameter
-            self._refroisize           = _refroisize
             self._eeroicenterpoint     = _eeroicenterpoint
             self._eerefroi             = _eerefroi
             self._eerefroiulx          = _eerefroiulx
             self._eerefroiuly          = _eerefroiuly
+            self._roipixelsindiameter  = _roipixelsindiameter
             self._eedstprojection      = _eedstprojection
             self._eenatimagecollection = _eenatimagecollection
             self._eedstimagecollection = _eedstimagecollection
+        #
+        # add collection properties (needed for export)
+        #
+        _eedstimagecollection = _eedstimagecollection.set('gee_refroi',     _eerefroi)
+        _eedstimagecollection = _eedstimagecollection.set('gee_projection', _eedstprojection)
         #
         #
         #
@@ -209,8 +259,14 @@ class GEECol_s2ndvi(GEECol, OrdinalProjectable):
         #
         #    apply maximum composite in case of overlapping images on same day
         #
-        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="max", verbose=verbose)        
-
+        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="max", verbose=verbose)
+        #
+        #    add collection properties describing this collection
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'S2ndvi')
+        #
+        #
+        #
         return eeimagecollection
 
 """
@@ -238,6 +294,10 @@ class GEECol_s2fapar(GEECol, OrdinalProjectable):
         #
         eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="max", verbose=verbose)
         #
+        #    add collection properties describing this collection
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'S2fapar')
+        #
         #
         #
         return eeimagecollection
@@ -260,6 +320,10 @@ class GEECol_s2scl(GEECol, CategoricalProjectable):
         #
         eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="mode", verbose=verbose)
         #
+        #    add collection properties describing this collection
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'S2scl')
+        #
         #
         #
         return eeimagecollection
@@ -267,7 +331,7 @@ class GEECol_s2scl(GEECol, CategoricalProjectable):
 
 """
 """
-class GEECol_s2sclsclconvmask(GEECol_s2scl):
+class GEECol_s2sclconvmask(GEECol_s2scl):
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
@@ -283,10 +347,18 @@ class GEECol_s2sclsclconvmask(GEECol_s2scl):
                     .unmask(255, False)  # sameFootprint=False: otherwise missing beyond footprint becomes 0
                     .toUint8()           # uint8 [0:not masked, 1:masked], no data: 255)
                     .rename('MASK')
-                    .copyProperties(image, ['system:time_start']))
+                    .copyProperties(image, ['system:time_start', 'gee_date']))
         eeimagecollection = eeimagecollection.map(convmask)
         #
-        #    no composite/composite - already done in base collection
+        #    no mosaic/composite - already done in base collection
+        #
+        pass
+        #
+        #    add collection properties describing this collection (in this case: overwrites 'gee_description' from GEECol_s2scl)
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'S2sclconvmask')
+        #
+        #
         #
         return eeimagecollection
 
@@ -302,7 +374,7 @@ class GEECol_s2rgb(GEECol, OrdinalProjectable):
     - their sample snippet hacks around with the quality bands to reduce clouds, and then ***.divide(10000)*** - this gives a hint?
     
     https://sentinel.esa.int/web/sentinel/user-guides/sentinel-2-msi/definitions
-    - tells something about TCI bands
+    - tells something about TCI bands (True Color Image)
         'The TCI is an RGB image built from the B02 (Blue), B03 (Green), and B04 (Red) Bands. 
         The reflectances are coded between 1 and 255, 0 being reserved for 'No Data'. 
         The saturation level of 255 digital counts correspond to a level of 3558 for L1C products 
@@ -345,6 +417,14 @@ class GEECol_s2rgb(GEECol, OrdinalProjectable):
         #    could be refined (e.g. select value with max ndvi) but worldcover 
         #     uses median too, and this is just an experimental class anyway.
         #
+        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="median", verbose=verbose)
+        #
+        #    add collection properties describing this collection
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'S2tcirgb')
+        #
+        #
+        #
         return eeimagecollection
 
 
@@ -358,8 +438,10 @@ class GEECol_s1sigma0(GEECol, UserProjectable):
             raise ValueError("band must be specified as one of 'VV', 'VH', 'HV', 'HH'")
         self.szband = szband
 
-        if not szorbitpass in ['ASCENDING', 'DESCENDING']:
-            raise ValueError("band must be specified as one of 'ASCENDING', 'DESCENDING'")
+        if not szorbitpass in ['ASC', 'ASCENDING', 'DES', 'DESCENDING']:
+            raise ValueError("band must be specified as one of 'ASCENDING'(or 'ASC'), 'DESCENDING'(or 'DES')")
+        if szorbitpass == 'ASC': szorbitpass = 'ASCENDING'
+        if szorbitpass == 'DES': szorbitpass = 'DESCENDING'
         self.szorbitpass = szorbitpass
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
@@ -385,6 +467,10 @@ class GEECol_s1sigma0(GEECol, UserProjectable):
         #    - and it doen't need the everlasting from-to-db
         #
         eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="mosaic", verbose=verbose)
+        #
+        #    add collection properties describing this collection - S1, as always, being something special
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'S1sigma0_' + self.szorbitpass[0:3] + '_' + self.szband)
         #
         #
         #
@@ -446,6 +532,10 @@ class GEECol_s1gamma0(GEECol_s1sigma0):
         #
         eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="mosaic", verbose=verbose)
         #
+        #    add collection properties describing this collection - S1, as always, being something special
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'S1gamma0_' + self.szorbitpass[0:3] + '_' + self.szband)
+        #
         #
         #
         return eeimagecollection
@@ -483,6 +573,10 @@ class GEECol_s1rvi(GEECol, OrdinalProjectable):
         #
         eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="max", verbose=verbose)        
         #
+        #    add collection properties describing this collection (TODO: limited to single orbit direction? -> modify description)
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'S1rvi')
+        #
         #
         #
         return eeimagecollection
@@ -491,6 +585,9 @@ class GEECol_s1rvi(GEECol, OrdinalProjectable):
 """
 """
 class GEECol_pv333ndvi(GEECol, OrdinalProjectable):
+    """
+    https://developers.google.com/earth-engine/datasets/catalog/VITO_PROBAV_C1_S1_TOC_333M
+    """
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
@@ -510,8 +607,150 @@ class GEECol_pv333ndvi(GEECol, OrdinalProjectable):
         eeimagecollection = eeimagecollection.map(ndvi)
         #
         #    no sense in mosaicing: S1_TOC_333M is global
+        #    however: geeutils.mosaictodate adds the 'gee_date' property which is mandatory in a GEECol
+        #    TODO: check if nop-mosaic costs performance. if so add 'gee_date' without mosaicing
+        #
+        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod=None, verbose=verbose) # currently None defaults to "mosaic"       
+        #
+        #    add collection properties describing this collection
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'PV333ndvi')
+        #
+        #
         #
         return eeimagecollection
+
+
+"""
+"""
+class GEECol_pv333sm(GEECol, CategoricalProjectable):
+    """
+    https://developers.google.com/earth-engine/datasets/catalog/VITO_PROBAV_C1_S1_TOC_333M#bands
+    
+    Bits 0-2: Cloud/ice snow/shadow flag    :  0: Clear  1: Shadow  2: Undefined  3: Cloud4: Ice
+    Bit    3: Land/sea                      :  0: Sea    1: Land (pixels with this value may include areas of sea)
+    Bit    4: Radiometric quality SWIR flag :  0: Bad    1: Good
+    Bit    5: Radiometric quality NIR flag  :  0: Bad    1: Good
+    Bit    6: Radiometric quality RED flag  :  0: Bad    1: Good
+    Bit    7: Radiometric quality BLUE flag :  0: Bad    1: Good
+    
+    remark: this is a BIT coded mask. 
+        we do use CategoricalProjectable (mode),
+        but one might argue reprojecting should be done per-bit 
+           
+    """
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        #
+        #    base collection
+        #
+        eeimagecollection = (ee.ImageCollection('VITO/PROBAV/C1/S1_TOC_333M')
+                             .select(['SM'])
+                             .filterBounds(eeroi)
+                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #    no sense in mosaicing: S1_TOC_333M is global
+        #    however: geeutils.mosaictodate adds the 'gee_date' property which is mandatory in a GEECol
+        #    TODO: check if nop-mosaic costs performance. if so add 'gee_date' without mosaicing
+        #
+        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod=None, verbose=verbose) # currently None defaults to "mosaic"       
+        #
+        #    add collection properties describing this collection
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'PV333sm')
+        #
+        #
+        #
+        return eeimagecollection
+
+
+"""
+"""
+class GEECol_pv333simplemask(GEECol_pv333sm):
+    """
+    https://developers.google.com/earth-engine/datasets/catalog/VITO_PROBAV_C1_S1_TOC_333M#bands
+    
+    STATUS MASK band:
+        Bits 0-2: Cloud/ice snow/shadow flag    :  0: Clear  1: Shadow  2: Undefined  3: Cloud4: Ice
+        Bit    3: Land/sea                      :  0: Sea    1: Land (pixels with this value may include areas of sea)
+        Bit    4: Radiometric quality SWIR flag :  0: Bad    1: Good
+        Bit    5: Radiometric quality NIR flag  :  0: Bad    1: Good
+        Bit    6: Radiometric quality RED flag  :  0: Bad    1: Good
+        Bit    7: Radiometric quality BLUE flag :  0: Bad    1: Good
+
+   geemask.SimpleMask: not masked (or clear) will be
+        0111 0000 : 112 Radiometric all but blue ok. sea.  clear sky.
+        0111 1000 : 120 Radiometric all but blue ok. land. clear sky.
+        1111 0000 : 240 Radiometric all ok.          sea.  clear sky. 
+        1111 1000 : 248 Radiometric all ok.          land. clear sky. 
+           
+    """
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        #
+        #    base collection from parent (SM)
+        #
+        eeimagecollection = super().collect(eeroi, eedatefrom, eedatetill, verbose=verbose)
+        #
+        #
+        #
+        def simplemask(image):
+            return (geemask.SimpleMask([112, 120, 240, 248])
+                .makemask(image)
+                .Not()
+                .unmask(255, False)  # sameFootprint=False: otherwise missing beyond footprint becomes 0. TODO: what does this mean here (global images)
+                .toUint8()           # uint8 [0:not masked, 1:masked], no data: 255
+                .rename('MASK')
+                .copyProperties(image, ['system:time_start', 'gee_date']))
+        eeimagecollection = eeimagecollection.map(simplemask)
+        #
+        #    no mosaic/composite - already done in base collection - and was obsolete there, but for the 'gee_date' property
+        #
+        pass
+        #
+        #    add collection properties describing this collection (in this case: overwrites 'gee_description' from GEECol_pv333sm)
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'PV333smsimplemask')
+        #
+        #
+        #
+        return eeimagecollection
+
+
+"""
+"""
+class GEECol_pv333rgb(GEECol, OrdinalProjectable):
+    """
+    experimental - just for the fun of it (to check where multiband images give problems)
+    
+    https://developers.google.com/earth-engine/datasets/catalog/VITO_PROBAV_C1_S1_TOC_333M
+        
+    """
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+
+        #
+        #
+        #       
+        eeimagecollection = (ee.ImageCollection('VITO/PROBAV/C1/S1_TOC_333M')
+                             .select(['RED', 'NIR', 'BLUE'])
+                             .filterBounds(eeroi)
+                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #    no sense in mosaicing: S1_TOC_333M is global
+        #    however: geeutils.mosaictodate adds the 'gee_date' property which is mandatory in a GEECol
+        #    TODO: check if nop-mosaic costs performance. if so add 'gee_date' without mosaicing
+        #
+        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod=None, verbose=verbose)
+        #
+        #    add collection properties describing this collection
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'PV333rgb')
+        #
+        #
+        #
+        return eeimagecollection
+
 
 
 

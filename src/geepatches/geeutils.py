@@ -354,59 +354,10 @@ def squarerasterboundsroi(eepoint, pixelsradius, eeprojection, verbose=False):
     return refproj_bounds
 
 
-# def mosaictodate(eeimagecollection, verbose=False):
-#     """
-#     mosaic images of same day.
-#         this is no max or mean composite; overlapping (but non masked) area's will get the value of one image.
-#         e.g. case where a geometry intersects multiple sentinel 2 tiles. crude.
-# 
-#     ee.ImageCollection.mosaic():
-#         Composites all the images in a collection, using the mask.
-#         mosaic() composites overlapping images according to their order in the collection (last on top). 
-#         To control the source of pixels in a mosaic (or a composite), use image masks.
-#     
-#     BEWARE: 
-#         result is unbounded (print(image.geometry().getInfo()) gives [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]])
-#         result will get the properties of the first image in the collection
-#     """
-#     #
-#     #    sort: to be sure of a reproducable projection - add day-granular 'date' as property
-#     #
-#     eeimagecollection = eeimagecollection.sort('system:time_start').map(lambda image: image.set('date', ee.Date(image.date().format('YYYY-MM-dd'))))
-#     #
-#     #    map-able list of distinct dates 
-#     #
-#     eelistdistinctdates = ee.List(eeimagecollection.distinct('date').aggregate_array('date'))
-#     #
-#     #    reference projection from earliest image in the collection - we might be at an UTM-border 
-#     #    use first band to avoid problems in special case of multiband products with different resolutions - expected to be used for testcases only.
-#     #
-#     eeprojectionreference = eeimagecollection.first().select(0).projection()
-#     
-#     if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate input collection: \n{szimagecollectioninfo(eeimagecollection)}")
-#    
-#     def _mosaic(eedate):
-#         thisdate            = ee.Date(eedate)
-#         thisdatescollection = eeimagecollection.filter(ee.Filter.date(thisdate, thisdate.advance(1, 'day')))
-#         thisdatesmosaic     = (thisdatescollection
-#                                .mosaic()
-#                                .reproject(eeprojectionreference)
-#                                .set('date', thisdate.format('YYYY-MM-dd'))
-#                                .copyProperties(thisdatescollection.first())                                      # properties from first image
-#                                .copyProperties(thisdatescollection.first(), ['system:id', 'system:time_start'])) # including 'system:id' - ambiguous indeed
-#         return thisdatesmosaic
-# 
-#     eeimagecollection = ee.ImageCollection(eelistdistinctdates.map(lambda eedate: _mosaic(eedate)))
-# 
-#     if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate result collection: \n{szimagecollectioninfo(eeimagecollection)}")
-#     
-#     return eeimagecollection
-
-
 def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
     """
     mosaic images of same date (day).
-        composite type can be specified as one of 'mean', 'max', 'min', 'mode' or 'mosaic' (default) 
+        composite type can be specified as one of 'mean', 'max', 'min', 'mode', 'median' or 'mosaic' (default) 
 
     ee.ImageCollection.mosaic():
         Composites all the images in a collection, using the mask.
@@ -422,19 +373,15 @@ def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
     ee.ImageCollection.mean/median/max/min():
         Reduces an image collection by calculating the mean/median/max/min of all values at each pixel across the stack of all matching bands.
 
-    BEWARE: 
+    BEWARE: (TODO: check if)
         result is unbounded (print(image.geometry().getInfo()) gives [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]])
-        result will get the properties of the first image in the collection
     """
     def _mosaicdaily_method_mosaic(eeimagecollection): return eeimagecollection.mosaic()
     def _mosaicdaily_method_mean(eeimagecollection):   return eeimagecollection.mean()
     def _mosaicdaily_method_max(eeimagecollection):    return eeimagecollection.max()
     def _mosaicdaily_method_min(eeimagecollection):    return eeimagecollection.min()
     def _mosaicdaily_method_mode(eeimagecollection):   return eeimagecollection.mode()
-    """
-    BEWARE: 
-        result is unbounded (print(image.geometry().getInfo()) gives [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]])
-    """
+    def _mosaicdaily_method_median(eeimagecollection): return eeimagecollection.median()
     #
     #
     #
@@ -445,17 +392,18 @@ def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
     elif szmethod == "max":    _method=_mosaicdaily_method_max
     elif szmethod == "min":    _method=_mosaicdaily_method_min
     elif szmethod == "mode":   _method=_mosaicdaily_method_mode
+    elif szmethod == "median": _method=_mosaicdaily_method_median
     else: 
-        raise ValueError("szmethod must be specified as one of 'mosaic', 'mean', 'max', 'min', 'mode'")
+        raise ValueError("szmethod must be specified as one of 'mosaic', 'mean', 'max', 'min', 'mode', 'median")
 
     #
-    #    sort: to be sure of a reproducable collection - add day-granular 'date' as property ( format('YYYY-MM-dd') takes care of 'day-granular')
+    #    sort: to be sure of a reproducable collection - add day-granular 'gee_date' as property ( format('YYYY-MM-dd') takes care of 'day-granularity')
     #
-    eeimagecollection = eeimagecollection.sort('system:time_start').map(lambda image: image.set('date', ee.Date(image.date().format('YYYY-MM-dd'))))
+    eeimagecollection = eeimagecollection.sort('system:time_start').map(lambda image: image.set('gee_date', ee.Date(image.date().format('YYYY-MM-dd'))))
     #
     #    map-able list of distinct dates 
     #
-    eelistdistinctdates = ee.List(eeimagecollection.distinct('date').aggregate_array('date'))
+    eelistdistinctdates = ee.List(eeimagecollection.distinct('gee_date').aggregate_array('gee_date'))
     #
     #    reference projection from earliest image in the collection - we might be at an UTM-border 
     #    use first band to avoid problems in special case of multiband products with different resolutions(expected to be used for testcases only.)
@@ -469,8 +417,14 @@ def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
         thisdatescollection = eeimagecollection.filter(ee.Filter.date(thisdate, thisdate.advance(1,'day')))
         thisdatesmosaic     = (_mosaicdaily_method_mosaic(thisdatescollection)
                                .reproject(eeprojectionreference)
-                               .set('date', thisdate.format('YYYY-MM-dd'))
+                               .set('gee_date', thisdate.format('YYYY-MM-dd'))
                                .copyProperties(thisdatescollection.first(), ['system:time_start']))
+        #
+        # should we 'keep' properties from first image? could be nice for debugging, but is ambiguous
+        #
+        # .copyProperties(thisdatescollection.first())                                      # properties from first image
+        # .copyProperties(thisdatescollection.first(), ['system:id', 'system:time_start'])) # including 'system:id' - ambiguous indeed
+
         return thisdatesmosaic
 
     eeimagecollection = ee.ImageCollection(eelistdistinctdates.map(lambda eedate: _mosaic(eedate)))
@@ -684,9 +638,10 @@ def szimagecollectioninfo(eeimagecollection, verbose=True):
     else:
         eeimagecollection = (eeimagecollection
                              .sort('system:time_start')
-                             .map(lambda image: image.set('date', ee.Date(image.date().format('YYYY-MM-dd')))))
+                             .map(lambda image: image.set('gee_date', ee.Date(image.date().format('YYYY-MM-dd')))))
         sz += f" from: {eeimagecollection.limit(1, 'system:time_start', True).first().date().format('YYYY-MM-dd').getInfo()}"
         sz += f" till: {eeimagecollection.limit(1, 'system:time_start', False).first().date().format('YYYY-MM-dd').getInfo()}"
+        sz += f" unique dates: {eeimagecollection.distinct('gee_date').size().getInfo()}"
         #sz += f"\n"
 
     
