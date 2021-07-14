@@ -88,11 +88,19 @@ class OrdinalProjectable(IProjectable):
 class GEECol(object):
     """
     The 'GEECol' class represents specific ('product') collections of images. The class contains the information and algorithms
-    needed to retrieve data from gee and calculate, convert... this data into the desired products.
+    needed to retrieve data from gee and calculate, convert... this data into the desired products for the specified region (roi).
     e.g. some ndvi-GEEProduct class should be able to collect the NIR and RED data for a specific sensor from gee,
     apply some normalizedDifference algorithm on this data.
     
-    until further notice we'll focus on 
+    The resulting products are expected to be exported eventually as timeseries for the specified roi.
+    - In case of overlapping images -e.g. overlap of Sentinel 2 tiles- multiple images with identical
+      timestamps can cover identical points.
+    - In other cases -e.g. Sentinel 1- multiple images can cover different parts of the specified roi
+      shortly after each other.
+    To avoid these ambiguities in the product collections, images contributing to the specified roi
+    are composited/mosaiced over daily intervals (probably thereby introducing more problems than solving).
+
+    Until further notice we'll focus on 
     - single-band (output) products
     - with minimum periodicity of 1 day
     
@@ -107,6 +115,7 @@ class GEECol(object):
                +--- GEECol_pv333ndvi
                +--- ...
     """
+
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         """
         - selects the ee.ImageCollection(s) needed to create the product
@@ -128,10 +137,34 @@ class GEECol(object):
         #
         #    to be implemented by daughter
         #
-        raise NotImplementedError("Subclasses should implement this!")
-    
+        raise NotImplementedError(f"{str(type(self).__name__)} - Subclasses should implement 'collect'!")
 
-    def getcollection(self, eedatefrom, eedatetill, eepoint, roipixelsindiameter, refcollection=None, refroipixelsdiameter=None, verbose=False):
+
+    def scaleandflag(self, geecolimagecollection, verbose=False):
+        """
+        scale, clamp, cast, ... : format the collection to be exported
+            
+        in case this product will be exported to file, this is recommended, otherwise masked areas
+            will be exported as 0 (Export.image.toDrive) or -1 (Image.getDownloadUrl)
+            regardless of its content (at least that is what we see now; ee version 0.1.248)
+        
+        in most normal cases - the GEEColl fully specified in its collect(...) - this should be done
+        
+        in special cases this might be avoided or postponed. 
+            e.g. when we want temporal max composite of an ndvi collection,
+            in case no scaleandflag is applied, this can be done straight forward by filtering 
+            the collection into date ranges, and apply the max reducer (ee.ImageCollection.max())
+
+        :param geecolimagecollection: ee.ImageCollection obtained from GEECol.collect
+        :returns: ee.ImageCollection
+        """
+        #
+        #    to be implemented by daughter
+        #
+        raise NotImplementedError(f"{str(type(self).__name__)} - Subclasses should implement 'scaleandflag!'")
+
+
+    def getcollection(self, eedatefrom, eedatetill, eepoint, roipixelsindiameter, refcollection=None, refroipixelsdiameter=None, doscaleandflag=True, verbose=False):
         """
         """
 
@@ -208,6 +241,12 @@ class GEECol(object):
         #
         _eedstimagecollection = self._reproject(_eenatimagecollection, _eedstprojection, verbose=verbose)
         #
+        # apply scaling, clipping, masking,... preparing the collection for export
+        #
+        if doscaleandflag:
+            _eedstimagecollection = self.scaleandflag(_eedstimagecollection, verbose=verbose)
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: scaled collection: {geeutils.szimagecollectioninfo(_eedstimagecollection)}")
+        #
         #
         #
         if True:
@@ -241,6 +280,8 @@ class GEECol(object):
 class GEECol_s2ndvi(GEECol, OrdinalProjectable):
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        """
+        """
         #
         #    base collection
         #
@@ -269,11 +310,33 @@ class GEECol_s2ndvi(GEECol, OrdinalProjectable):
         #
         return eeimagecollection
 
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .clamp(-1,1)           # clamp looses properties 
+                                                                 .toFloat()             # actually obsolete here
+                                                                 .copyProperties(image)
+                                                                 .copyProperties(image, ['system:time_start'])))
+#         #
+#         #    historical vito ndvi scaling [ -0.08, 0.92 ] -> [0, 250] with 255 as no-data
+#         #
+#         eeimagecollection = eeimagecollection.map(lambda image: (image
+#                                                                  .add(0.08).multiply(250).clamp(0,250)
+#                                                                  .unmask(255, False)
+#                                                                  .toUint8()
+#                                                                  .copyProperties(image)
+#                                                                  .copyProperties(image, ['system:time_start'])))
+        return eeimagecollection
+        
+
 """
 """
 class GEECol_s2fapar(GEECol, OrdinalProjectable):
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        """
+        """
         #
         #    base collection
         #
@@ -302,12 +365,33 @@ class GEECol_s2fapar(GEECol, OrdinalProjectable):
         #
         return eeimagecollection
 
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .clamp(0,1)            # clamp looses properties 
+                                                                 .toFloat()             # otherwise would be double (Float64)
+                                                                 .copyProperties(image)
+                                                                 .copyProperties(image, ['system:time_start'])))
+#         #
+#         #    historical vito fapar scaling [ 0, 1 ] -> [0, 200] with 255 as no-data
+#         #
+#         eeimagecollection = eeimagecollection.map(lambda image: (image
+#                                                                  .multiply(200).clamp(0,200)
+#                                                                  .unmask(255, False)
+#                                                                  .toUint8()
+#                                                                  .copyProperties(image)
+#                                                                  .copyProperties(image, ['system:time_start'])))
+        return eeimagecollection
+
 
 """
 """
 class GEECol_s2scl(GEECol, CategoricalProjectable):
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        """
+        """
         #
         #    base collection
         #
@@ -326,6 +410,17 @@ class GEECol_s2scl(GEECol, CategoricalProjectable):
         #
         #
         #
+        return eeimagecollection
+
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        'S2 half tiles' (e.g. 31UES on '2020-01-29') have limited their footprint to the area 
+        where data lives, thus *NOT* the full 31UES footprint
+        when exporting these images, we'll mask the empty area with 0 - being the SCENE CLASSIFICATION NO-DATA value
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .unmask(0, False)      # no data to 0 
+                                                                 .toUint8()))           # actually obsolete here
         return eeimagecollection
 
 
@@ -360,6 +455,21 @@ class GEECol_s2sclconvmask(GEECol_s2scl):
         #
         #
         #
+        return eeimagecollection
+
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        'S2 half tiles' (e.g. 31UES on '2020-01-29') have limited their footprint to the area 
+        where data lives, thus *NOT* the full 31UES footprint
+        when exporting masks [0,1] for these images, we'll indicate the unknown area with 255 as no data
+        
+          0: not masked (clear sky)
+          1: masked     (belgian sky)
+        255: no data    (belgian politics)
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .unmask(255, False)    # no data to 255
+                                                                 .toUint8()))           # actually obsolete here
         return eeimagecollection
 
 
@@ -427,6 +537,14 @@ class GEECol_s2rgb(GEECol, OrdinalProjectable):
         #
         return eeimagecollection
 
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .unmask(0, False)      # no data to 0 as esa intended
+                                                                 .toUint8()))
+        return eeimagecollection
+
 
 """
 """
@@ -476,6 +594,13 @@ class GEECol_s1sigma0(GEECol, UserProjectable):
         #
         return eeimagecollection
 
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        TODO: for the moment just toFloat() conversion
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .toFloat()))
+        return eeimagecollection
 
     def _reproject(self, eeimagecollection, eeprojection, verbose=False):
         """
@@ -540,6 +665,14 @@ class GEECol_s1gamma0(GEECol_s1sigma0):
         #
         return eeimagecollection
 
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        TODO: for the moment just toFloat() conversion
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .toFloat()))
+        return eeimagecollection
+
 
 """
 """
@@ -581,6 +714,14 @@ class GEECol_s1rvi(GEECol, OrdinalProjectable):
         #
         return eeimagecollection
 
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        TODO: for the moment just toFloat() conversion
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .toFloat()))
+        return eeimagecollection
+
 
 """
 """
@@ -620,6 +761,27 @@ class GEECol_pv333ndvi(GEECol, OrdinalProjectable):
         #
         return eeimagecollection
 
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .clamp(-1,1)           # clamp looses properties 
+                                                                 .toFloat()             # actually obsolete here
+                                                                 .copyProperties(image)
+                                                                 .copyProperties(image, ['system:time_start'])))
+
+#         #
+#         #    historical vito ndvi scaling [ -0.08, 0.92 ] -> [0, 250] with 255 as no-data
+#         #
+#         eeimagecollection = eeimagecollection.map(lambda image: (image
+#                                                                  .add(0.08).multiply(250).clamp(0,250)
+#                                                                  .unmask(255, False)
+#                                                                  .toUint8()
+#                                                                  .copyProperties(image)
+#                                                                  .copyProperties(image, ['system:time_start'])))
+        
+        return eeimagecollection
+
 
 """
 """
@@ -641,6 +803,8 @@ class GEECol_pv333sm(GEECol, CategoricalProjectable):
     """
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        """
+        """
         #
         #    base collection
         #
@@ -661,6 +825,14 @@ class GEECol_pv333sm(GEECol, CategoricalProjectable):
         #
         #
         #
+        return eeimagecollection
+
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .unmask(2, False) # mask to 00000010 - all bad, sea, undefined
+                                                                 .toUint8()))
         return eeimagecollection
 
 
@@ -716,14 +888,31 @@ class GEECol_pv333simplemask(GEECol_pv333sm):
         #
         return eeimagecollection
 
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+          0: not masked
+          1: masked
+        255: no data
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .unmask(255, False)    # no data to 255
+                                                                 .toUint8()))           # actually obsolete here
+        return eeimagecollection
+
 
 """
 """
 class GEECol_pv333rgb(GEECol, OrdinalProjectable):
     """
     experimental - just for the fun of it (to check where multiband images give problems)
+                 - actually not rgb but a 'false color'
     
     https://developers.google.com/earth-engine/datasets/catalog/VITO_PROBAV_C1_S1_TOC_333M
+    - doesn't bother to give minimum and maximum values of the bands
+    
+    https://proba-v.vgt.vito.be/sites/proba-v.vgt.vito.be/files/products_user_manual.pdf
+    - reflectances:  scale: 2000 offset: 0 no-data: -1
+    - PV = (DN - OFFSET) / SCALE
         
     """
 
@@ -749,6 +938,25 @@ class GEECol_pv333rgb(GEECol, OrdinalProjectable):
         #
         #
         #
+        return eeimagecollection
+
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        PV products_user_manual:
+        - reflectances:  scale: 2000 offset: 0 no-data: -1
+        - PV = (DN - OFFSET) / SCALE
+
+        we'll try to mimic Sentinel-2 TCI bands scaling
+            'The TCI is an RGB image built from the B02 (Blue), B03 (Green), and B04 (Red) Bands. 
+            The reflectances are coded between 1 and 255, 0 being reserved for 'No Data'. 
+
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .divide(2000).multiply(254).add(1)
+                                                                 .unmask(0, False)
+                                                                 .toUint8()
+                                                                 .copyProperties(image)
+                                                                 .copyProperties(image, ['system:time_start'])))
         return eeimagecollection
 
 

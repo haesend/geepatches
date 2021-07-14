@@ -53,7 +53,7 @@ class GEEExp(object):
 
         SLEEPTOOMUCHTASKSSECONDS = 120
         SLEEPAFTEREXCEPTION      = 120
-        MAXACTIVETASKS           = 15
+        MAXACTIVETASKS           = 20
         MAXATTEMPTS              = 2
 
         def _activertaskscount():
@@ -119,7 +119,7 @@ class GEEExp(object):
             #
             # export each image in the collection separately - seems to take a lot of time.
             #
-            eelist = eeimagecollection.toList(collection.size())
+            eelist = collection.toList(collection.size())
             for iIdx in range(collection.size().getInfo()):
                 eeimage     = ee.Image(eelist.get(iIdx))
                 #
@@ -195,6 +195,63 @@ class GEEExp(object):
                     region        = exportregion,
                     file_per_band = True)
     
+    """
+    """
+    def exportseparateimagestodrive(self, eeimagecollection, szfilenameprefix="", verbose=False):
+        #
+        #    TODO - folder
+        #
+#         #
+#         # - normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
+#         # - verfify the path is an existing directory
+#         #
+#         szoutputdir = os.path.normpath(szoutputdir)
+#         if not os.path.isdir(szoutputdir) :
+#             raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+        #
+        #
+        #
+        exportregion, exportscale, szcollectiondescription, szbandnames = self._getcommonexportparams(eeimagecollection, verbose=verbose)
+        #
+        #
+        #
+        for szbandname in szbandnames:
+            collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
+            collectionsize = collection.size().getInfo()
+        
+            if verbose: print(f"{str(type(self).__name__)}.exportseparateimagestodrive - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
+
+            #
+            # export each image in the collection separately - seems to take a lot of time. 
+            # for small files even exportseparateimages is faster
+            # apparently ee.batch.Export.image.toDrive creates a lot of overhead
+            #
+            eelist = collection.toList(collection.size())
+            for iIdx in range(collection.size().getInfo()):
+                eeimage     = ee.Image(eelist.get(iIdx))
+    
+                szyyyymmdd  = geeutils.szISO8601Date(eeimage.get('gee_date'))
+                if 1 < len(szbandnames):
+                    # multi band images collection (exceptional)
+                    szfilename  = f"{szfilenameprefix}{szcollectiondescription}_{szbandname}.{szyyyymmdd}"
+                else:
+                    # single band images collection (expected)
+                    szfilename  = f"{szfilenameprefix}{szcollectiondescription}.{szyyyymmdd}"
+    
+                eetask = ee.batch.Export.image.toDrive(
+                    image          = eeimage,
+                    region         = exportregion,
+                    description    = szfilename,
+                    folder         = f"geepatches",
+                    scale          = exportscale,
+                    skipEmptyTiles = False,
+                    fileNamePrefix = szfilename,
+                    fileFormat     = 'GeoTIFF')
+    
+                if not self._starteetask(eetask):
+                    if verbose: print(f"{str(type(self).__name__)}.exportimagestackstodrive: abandoned.")
+                    return False
+
     
     """
     """
@@ -241,7 +298,7 @@ class GEEExp(object):
                 image          = stackedimage,
                 region         = exportregion,
                 description    = szfilename,
-                folder         = f"geepatches_{szcollectiondescription}",
+                folder         = f"geepatches",
                 scale          = exportscale,
                 skipEmptyTiles = False,
                 fileNamePrefix = szfilename,
