@@ -15,215 +15,187 @@ import geeexport
 #
 #
 #
-do_S2ndvi              = False
+do_S2ndvi              = True
 do_S2fapar             = True
-do_S2scl               = False
+do_S2scl               = True
 do_S2sclconvmask       = True
-do_S2tcirgb            = False
+do_S2tcirgb            = True
 
-do_S1sigma0            = False
-do_S1gamma0            = False
+do_S1sigma0            = True
+do_S1gamma0            = True
 do_S1rvi               = True
 
 do_PV333ndvi           = True
-do_PV333sm             = False
-do_PV333smsimplemask   = False
-do_PV333rgb            = False
-
+do_PV333sm             = True
+do_PV333smsimplemask   = True
+do_PV333rgb            = True
 
 
 #
-#
+#    q&d demonstrator
 #
 class GEEExporter():
-    def _getgeecollections(self,eedatefrom, eedatetill, eepoint, verbose=False):
+    #
+    #
+    #
+    def _getgeecollections(self, eedatefrom, eedatetill, eepoint, verbose=False):
         
-        refcollection = geeproduct.GEECol_s2scl()
-        
-        n = 1
-        lst = []
-        
-        if do_S2ndvi           : lst.append(geeproduct.GEECol_s2ndvi().getcollection(             eedatefrom, eedatetill, eepoint, 128*n, refcollection, 64*n, verbose=verbose))
-        if do_S2fapar          : lst.append(geeproduct.GEECol_s2fapar().getcollection(            eedatefrom, eedatetill, eepoint, 128*n, refcollection, 64*n, verbose=verbose))
-        if do_S2scl            : lst.append(geeproduct.GEECol_s2scl().getcollection(              eedatefrom, eedatetill, eepoint,  64*n, refcollection, 64*n, verbose=verbose))
-        if do_S2sclconvmask    : lst.append(geeproduct.GEECol_s2sclconvmask().getcollection(      eedatefrom, eedatetill, eepoint,  64*n, refcollection, 64*n, verbose=verbose))
-        if do_S2tcirgb         : lst.append(geeproduct.GEECol_s2rgb().getcollection(              eedatefrom, eedatetill, eepoint, 128*n, refcollection, 64*n, verbose=verbose))
+        #
+        #    using sentinel 2 20m as reference
+        #
+        refcol    = geeproduct.GEECol_s2scl()
+        refcolpix = 64
+        #
+        #    heuristics for other products
+        #
+        s2_20m_pix  = refcolpix
+        s2_10m_pix  = 2 * s2_20m_pix
+        s1_10m_pix  = s2_10m_pix
+        pv333m_pix = int(s2_20m_pix*20/333) + 2
+        #
+        #    generator
+        #
+        if do_S2ndvi           : yield geeproduct.GEECol_s2ndvi().getcollection(             eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+        if do_S2fapar          : yield geeproduct.GEECol_s2fapar().getcollection(            eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+        if do_S2scl            : yield geeproduct.GEECol_s2scl().getcollection(              eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if do_S2sclconvmask    : yield geeproduct.GEECol_s2sclconvmask().getcollection(      eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if do_S2tcirgb         : yield geeproduct.GEECol_s2rgb().getcollection(              eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
 
-        if do_S1sigma0         : lst.append(geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, 128*n, refcollection, 64*n, verbose=verbose))
-        if do_S1sigma0         : lst.append(geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, 128*n, refcollection, 64*n, verbose=verbose))
-        if do_S1sigma0         : lst.append(geeproduct.GEECol_s1sigma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, 128*n, refcollection, 64*n, verbose=verbose))
-        if do_S1sigma0         : lst.append(geeproduct.GEECol_s1sigma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, 128*n, refcollection, 64*n, verbose=verbose))
-        if do_S1gamma0         : lst.append(geeproduct.GEECol_s1gamma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, 128*n, refcollection, 64*n, verbose=verbose))
-        if do_S1gamma0         : lst.append(geeproduct.GEECol_s1gamma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, 128*n, refcollection, 64*n, verbose=verbose))
-        if do_S1gamma0         : lst.append(geeproduct.GEECol_s1gamma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, 128*n, refcollection, 64*n, verbose=verbose))
-        if do_S1gamma0         : lst.append(geeproduct.GEECol_s1gamma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, 128*n, refcollection, 64*n, verbose=verbose))
-        if do_S1rvi            : lst.append(geeproduct.GEECol_s1rvi().getcollection(              eedatefrom, eedatetill, eepoint, 128*n, refcollection, 64*n, verbose=verbose))
+        if do_S1sigma0         : yield geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if do_S1sigma0         : yield geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if do_S1sigma0         : yield geeproduct.GEECol_s1sigma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if do_S1sigma0         : yield geeproduct.GEECol_s1sigma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if do_S1gamma0         : yield geeproduct.GEECol_s1gamma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if do_S1gamma0         : yield geeproduct.GEECol_s1gamma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if do_S1gamma0         : yield geeproduct.GEECol_s1gamma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if do_S1gamma0         : yield geeproduct.GEECol_s1gamma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if do_S1rvi            : yield geeproduct.GEECol_s1rvi().getcollection(              eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
         
-        if do_PV333ndvi        : lst.append(geeproduct.GEECol_pv333ndvi().getcollection(          eedatefrom, eedatetill, eepoint,   3*n, refcollection, 64*n, verbose=verbose))
-        if do_PV333sm          : lst.append(geeproduct.GEECol_pv333sm().getcollection(            eedatefrom, eedatetill, eepoint,   3*n, refcollection, 64*n, verbose=verbose))
-        if do_PV333smsimplemask: lst.append(geeproduct.GEECol_pv333simplemask().getcollection(    eedatefrom, eedatetill, eepoint,   3*n, refcollection, 64*n, verbose=verbose))
-        if do_PV333rgb         : lst.append(geeproduct.GEECol_pv333rgb().getcollection(           eedatefrom, eedatetill, eepoint,   3*n, refcollection, 64*n, verbose=verbose))     
-    
-        return lst
+        if do_PV333ndvi        : yield geeproduct.GEECol_pv333ndvi().getcollection(          eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
+        if do_PV333sm          : yield geeproduct.GEECol_pv333sm().getcollection(            eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
+        if do_PV333smsimplemask: yield geeproduct.GEECol_pv333simplemask().getcollection(    eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
+        if do_PV333rgb         : yield geeproduct.GEECol_pv333rgb().getcollection(           eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)     
     
     def exportseparateimages(self, eepoint, eedatefrom, eedatetill, szoutputdir, verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
             geeexport.GEEExp().exportseparateimages(geecollection, szoutputdir, verbose=verbose)
 
     def exportimagestacks(self, eepoint, eedatefrom, eedatetill, szoutputdir, verbose=False):
+        result = True
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
-            geeexport.GEEExp().exportimagestacks(geecollection, szoutputdir, verbose=verbose)
+            result = result and geeexport.GEEExp().exportimagestacks(geecollection, szoutputdir, verbose=verbose)
+        return result
 
+    def exportseparateimagestodrive(self, eepoint, eedatefrom, eedatetill, szoutputdir, verbose=False):
+        for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
+            geeexport.GEEExp().exportseparateimagestodrive(geecollection, verbose=verbose)
+        
     def exportimagestackstodrive(self, eepoint, eedatefrom, eedatetill, szoutputdir, verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
             geeexport.GEEExp().exportimagestackstodrive(geecollection, verbose=verbose)
-
-def main():
-    eepoint           = geeutils.bobspoint #tennvenlopoint
-    eedatefrom        = geeutils.fleecycloudsday
-    eedatetill        = geeutils.fleecycloudsday.advance(1, 'week')
+#
+#
+#
+def xmain():
+    eepoint           = geeutils.half31UESpoint #bobspoint #tennvenlopoint
+    eedatefrom        = geeutils.half31UESday #fleecycloudsday
+    eedatetill        = eedatefrom.advance(1, 'year')
     verbose           = False    
+    #GEEExporter().exportseparateimagestodrive(eepoint, eedatefrom, eedatetill, "C:/tmp/", verbose)
     GEEExporter().exportimagestackstodrive(eepoint, eedatefrom, eedatetill, "C:/tmp/", verbose)
-# #
-# #
-# #
-# class Exporter():
-#     
-#     def __init__(self, szyyyymmddfrom, szyyyymmddtill, refprodroiradius, refprodroiradunits = 'pixels', verbose=False):
-#         """
-#         """
-#         eedatefrom  = ee.Date(szyyyymmddfrom) 
-#         eedatetill  = ee.Date(szyyyymmddtill)
-#         
-#         product_S1                  = geeproduct.GEEProduct_S1(verbose=verbose)
-#         product_S2ndvi              = geeproduct.GEEProduct_S2ndvi(verbose=verbose)
-#         product_S2fapar             = geeproduct.GEEProduct_S2fapar(verbose=verbose)
-#         product_S2scl               = geeproduct.GEEProduct_S2scl(verbose=verbose)
-#         product_S2sclconvmask       = geeproduct.GEEProduct_S2sclconvmask(verbose=verbose)
-#         product_PV333Mndvi          = geeproduct.GEEProduct_PV333Mndvi(verbose=verbose)
-#         product_PV333Msm            = geeproduct.GEEProduct_PV333Msm(verbose=verbose)
-#         product_PV333Msmsimplemask  = geeproduct.GEEProduct_PV333Msmsimplemask(verbose=verbose)
-# 
-#         #
-#         #    e.g.: 128 pix refprodroiradius with product_S2ndvi reference => 128 * 2 * 10m = 256m square
-#         #    upsampling maximum is PV333m: 333m -> 32*10m
-#         #       
-#         self._export_S1                 = geeexport.GEEExport(product_S1,                 eedatefrom, eedatetill, refprodroiradius,   2, 32, product_S2ndvi, refprodroiradunits=refprodroiradunits) 
-#         self._export_S2ndvi             = geeexport.GEEExport(product_S2ndvi,             eedatefrom, eedatetill, refprodroiradius,   1, 32,                 refprodroiradunits=refprodroiradunits)
-#         self._export_S2fapar            = geeexport.GEEExport(product_S2fapar,            eedatefrom, eedatetill, refprodroiradius,   1, 32, product_S2ndvi, refprodroiradunits=refprodroiradunits)
-#         self._export_S2scl              = geeexport.GEEExport(product_S2scl,              eedatefrom, eedatetill, refprodroiradius,   2, 32, product_S2ndvi, refprodroiradunits=refprodroiradunits)
-#         self._export_S2sclconvmask      = geeexport.GEEExport(product_S2sclconvmask,      eedatefrom, eedatetill, refprodroiradius,   2, 32, product_S2ndvi, refprodroiradunits=refprodroiradunits)
-#         self._export_PV333Mndvi         = geeexport.GEEExport(product_PV333Mndvi,         eedatefrom, eedatetill, refprodroiradius,  32, 32, product_S2ndvi, refprodroiradunits=refprodroiradunits)
-#         self._export_PV333Msm           = geeexport.GEEExport(product_PV333Msm,           eedatefrom, eedatetill, refprodroiradius,  32, 32, product_S2ndvi, refprodroiradunits=refprodroiradunits)
-#         self._export_PV333Msmsimplemask = geeexport.GEEExport(product_PV333Msmsimplemask, eedatefrom, eedatetill, refprodroiradius,  32, 32, product_S2ndvi, refprodroiradunits=refprodroiradunits)
-# 
-#     def exportpointtofile(self, szid, eepoint, szdstpath, verbose=False):
-#         """
-#         """
-#         if do_S1:
-#             self._export_S1.exportpointtofile(                szid, eepoint, szdstpath, verbose=verbose)
-#         if do_S2ndvi:
-#             self._export_S2ndvi.exportpointtofile(            szid, eepoint, szdstpath, verbose=verbose)
-#         if do_S2fapar:
-#             self._export_S2fapar.exportpointtofile(           szid, eepoint, szdstpath, verbose=verbose)
-#         if do_S2scl:
-#             self._export_S2scl.exportpointtofile(             szid, eepoint, szdstpath, verbose=verbose)
-#         if do_S2sclconvmask:
-#             self._export_S2sclconvmask.exportpointtofile(     szid, eepoint, szdstpath, verbose=verbose)
-#         if do_PV333Mndvi:
-#             self._export_PV333Mndvi.exportpointtofile(        szid, eepoint, szdstpath, verbose=verbose)
-#         if do_PV333Msm:
-#             self._export_PV333Msm.exportpointtofile(          szid, eepoint, szdstpath, verbose=verbose)
-#         if do_PV333Msmsimplemask:
-#             self._export_PV333Msmsimplemask.exportpointtofile(szid, eepoint, szdstpath, verbose=verbose)
-# 
-#     def exportpointtodrive(self, szid, eepoint, szdstfolder="geepatches", verbose=False):
-#         """
-#         """
-#         retcode = 0
-#         if do_S1:
-#             if not self._export_S1.exportpointtodrive(                szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 0
-#         if do_S2ndvi:
-#             if not self._export_S2ndvi.exportpointtodrive(            szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 1
-#         if do_S2fapar:
-#             if not self._export_S2fapar.exportpointtodrive(           szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 2
-#         if do_S2scl:
-#             if not self._export_S2scl.exportpointtodrive(             szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 3
-#         if do_S2sclconvmask:
-#             if not self._export_S2sclconvmask.exportpointtodrive(     szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 4
-#         if do_PV333Mndvi:
-#             if not self._export_PV333Mndvi.exportpointtodrive(        szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 5
-#         if do_PV333Msm:
-#             if not self._export_PV333Msm.exportpointtodrive(          szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 6
-#         if do_PV333Msmsimplemask:
-#             if not self._export_PV333Msmsimplemask.exportpointtodrive(szid, eepoint, szdstfolder, verbose=verbose): retcode += 2 ** 7
-#         return exit(retcode)
-# 
-# #
-# #
-# #
-# def xmain():
-#     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname).3s {%(module)s:%(funcName)s:%(lineno)d} - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-# 
-#     szyyyycropyear   = '2019'
-#     szshapefile      = r"D:\data\ref\field_selection\test_fields_sample\2019_250testfields.shp"
-#     #szshapefile      = r"/data/CropSAR/data/ref/shp/testfields/2019_250testfields.shp"
-#     szyyyymmddfrom   = str(int(szyyyycropyear)    )  + "-01-01" 
-#     szyyyymmddtill   = str(int(szyyyycropyear) + 1)  + "-01-01"
-#     parcelsgeodataframe = geopandas.read_file(szshapefile)
-#     parcelsgeodataframe.set_index( 'fieldID', inplace=True, verify_integrity=True)
-#     parcelsgeodataframe.to_crs(epsg=4326, inplace=True)
-#     #
-#     #    logging to file
-#     #
-#     szoutputdir     =f"D:\\tmp\\{os.path.basename(__file__)[0:-3]}"
-#     #szoutputdir     =r"/data/CropSAR/tmp/dominique/geebatch"
-#     szoutputbasename=os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3] + '_' + szyyyymmddfrom + '_' + szyyyymmddtill}")
-#     logfilehandler = logging.FileHandler(szoutputbasename + ".log")
-#     logfilehandler.setFormatter(logging.Formatter('%(asctime)s %(levelname).4s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-#     logging.getLogger().addHandler(logfilehandler)
-# 
-# 
-#     szdstfolder = "geeyatt_" + szyyyycropyear + "_mep"
-#     #
-#     #
-#     #
-#     exporter = Exporter(szyyyymmddfrom, szyyyymmddtill, 128, verbose=False)
-# 
-#     try:
-#     
-#         for fieldId, field in parcelsgeodataframe.iterrows():
-#             shapelygeometry = field['geometry']
-#             shapelypoint    = shapelygeometry.centroid
-#             eepoint         = ee.Geometry.Point(shapelypoint.x, shapelypoint.y)
-#             
-#             datetime_tick  = datetime.datetime.now()
-#             print (f"fieldId {fieldId}")
-#             """
-#             result = geeutils.wrapasprocess(
-#                 exporter.exportpointtofile, 
-#                 args = (fieldId, eepoint, szoutputdir),
-#                 timeout=24*60*60, attempts=3, verbose=False)
-#             """
-#             result = geeutils.wrapasprocess(
-#                 exporter.exportpointtodrive, 
-#                 args = (fieldId, eepoint, szdstfolder, False),
-#                 timeout=24*60*60, attempts=3, verbose=True) # wait one day, thanks to my greedy fellow users 24*60*60
-#             if result:
-#                 logging.info(f"fieldId {fieldId}: SUCCESS {int((datetime.datetime.now()-datetime_tick).total_seconds())} seconds")
-#             else:
-#                 logging.error(f"fieldId {fieldId}: FAILED {int((datetime.datetime.now()-datetime_tick).total_seconds())} seconds")
-#     #
-#     #    anyway
-#     #
-#     finally:
-#         #
-#         #    remove handler we added at function start
-#         #
-#         logging.getLogger().removeHandler(logfilehandler)
+    #GEEExporter().exportimagestacks(eepoint, eedatefrom, eedatetill, "C:/tmp/", verbose)
+    #GEEExporter().exportseparateimages(eepoint, eedatefrom, eedatetill, "C:/tmp2/", verbose)
+
+
 #
 #
 #
+def main():
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname).3s {%(module)s:%(funcName)s:%(lineno)d} - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+  
+    szyyyycropyear   = '2019'
+    szshapefile      = r"D:\data\ref\field_selection\test_fields_sample\2019_250testfields.shp"
+    #szshapefile      = r"/data/CropSAR/data/ref/shp/testfields/2019_250testfields.shp"
+
+    szyyyymmddfrom   = str(int(szyyyycropyear)    )  + "-01-01" 
+    szyyyymmddtill   = str(int(szyyyycropyear)    )  + "-02-01"
+    #
+    #    have pandas read the shapefile which is assumed to have fieldID
+    #
+    parcelsgeodataframe = geopandas.read_file(szshapefile)
+    parcelsgeodataframe.set_index( 'fieldID', inplace=True, verify_integrity=True)
+    parcelsgeodataframe.to_crs(epsg=4326, inplace=True)
+    #
+    #    root output dir on system
+    #
+    szoutputdir     = r"C:\tmp"
+    #szoutputdir     = r"/data/CropSAR/tmp/dominique"
+    
+    #
+    #    root output dir for tool : ..\geebatch
+    #
+    szoutputdir = os.path.normpath(szoutputdir)
+    if not os.path.isdir(szoutputdir) : raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+    szoutputdir = os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3]}")
+    if not os.path.isdir(szoutputdir) : 
+        os.mkdir(szoutputdir)
+        if not os.path.isdir(szoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
+        os.chmod(szoutputdir, 0o777)
+    #
+    #    logging to file: ..\geebatch\geebatch_19990101_20000101.log
+    #
+    szoutputbasename=os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3] + '_' + szyyyymmddfrom + '_' + szyyyymmddtill}")
+    logfilehandler = logging.FileHandler(szoutputbasename + ".log")
+    logfilehandler.setFormatter(logging.Formatter('%(asctime)s %(levelname).4s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+    logging.getLogger().addHandler(logfilehandler)
+    #
+    #    output dir for run (cropyear) : ..\geebatch\1999
+    #
+    szoutputdir = os.path.normpath(szoutputdir)
+    if not os.path.isdir(szoutputdir) : raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+    szoutputdir = os.path.join(szoutputdir, szyyyycropyear)
+    if not os.path.isdir(szoutputdir) : 
+        os.mkdir(szoutputdir)
+        if not os.path.isdir(szoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
+        os.chmod(szoutputdir, 0o777)
+    #
+    #
+    #
+    exporter = GEEExporter()
+    try:
+        for fieldId, field in parcelsgeodataframe.iterrows():
+            datetime_tick  = datetime.datetime.now()
+
+            shapelygeometry = field['geometry']
+            shapelypoint    = shapelygeometry.centroid
+            eepoint         = ee.Geometry.Point(shapelypoint.x, shapelypoint.y)
+
+            #
+            #    output dir per field : ..\geebatch\1999\0000280859BE7A17
+            #
+            szfieldoutputdir = os.path.join(szoutputdir, fieldId)
+            if not os.path.isdir(szfieldoutputdir) : 
+                os.mkdir(szfieldoutputdir)
+                if not os.path.isdir(szfieldoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
+                os.chmod(szfieldoutputdir, 0o777)
+
+            result = exporter.exportimagestacks(eepoint, ee.Date(szyyyymmddfrom), ee.Date(szyyyymmddtill), szfieldoutputdir)
+
+            if result:
+                logging.info(f"fieldId {fieldId}: SUCCESS {int((datetime.datetime.now()-datetime_tick).total_seconds())} seconds")
+            else:
+                logging.error(f"fieldId {fieldId}: FAILED {int((datetime.datetime.now()-datetime_tick).total_seconds())} seconds")
+    #
+    #    anyway
+    #
+    finally:
+        #
+        #    remove handler we added at function start
+        #
+        logging.getLogger().removeHandler(logfilehandler)
+
+
+
 if __name__ == '__main__':
     print('starting main')
     main()

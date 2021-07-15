@@ -144,56 +144,63 @@ class GEEExp(object):
     def exportimagestacks(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
         """
         """
-        #
-        # - normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
-        # - verfify the path is an existing directory
-        #
-        szoutputdir = os.path.normpath(szoutputdir)
-        if not os.path.isdir(szoutputdir) :
-            raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
-        #
-        #
-        #
-        exportregion, exportscale, szcollectiondescription, szbandnames = self._getcommonexportparams(eeimagecollection, verbose=verbose)
-        #
-        #
-        #
-        for szbandname in szbandnames:
-            collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
-            collectionsize = collection.size().getInfo()
+        try:
+            #
+            # - normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
+            # - verfify the path is an existing directory
+            #
+            szoutputdir = os.path.normpath(szoutputdir)
+            if not os.path.isdir(szoutputdir) :
+                raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+            #
+            #
+            #
+            exportregion, exportscale, szcollectiondescription, szbandnames = self._getcommonexportparams(eeimagecollection, verbose=verbose)
+            #
+            #
+            #
+            for szbandname in szbandnames:
+                collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
+                collectionsize = collection.size().getInfo()
+            
+                if verbose: print(f"{str(type(self).__name__)}.exportimagestacks - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
         
-            if verbose: print(f"{str(type(self).__name__)}.exportimagestacks - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
-    
-            offset = 0
-            while offset < collectionsize:
-                eelist  = collection.toList(100, offset)
-                offset += 100
-                print(eelist.size().getInfo())
-                #
-                # stack multiple single-band images into single multi-band image - exports faster than separate images
-                #
-                def addimagebandstostack(nextimage, previousstack):
-                    nextimage = ee.Image(nextimage)
-                    return ee.Image(previousstack).addBands(nextimage.rename(nextimage.date().format('YYYY-MM-dd')))
-                stackedimage = ee.Image(eelist.iterate(addimagebandstostack, ee.Image().select()))
-        
-                #
-                # filenames - again
-                #    file_per_band = True will create separate images per band, thereby appending .bandname to the filename parameter
-                #    => files will be: szfilename.bandname.tif
-                #
-                if 1 < len(szbandnames):
-                    # multi band images collection (exceptional)
-                    szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}_{szbandname}.tif")
-                else:
-                    # single band images collection (expected)
-                    szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}.tif")
-                geemap.ee_export_image(
-                    stackedimage,
-                    filename      = szfilename,
-                    scale         = exportscale,
-                    region        = exportregion,
-                    file_per_band = True)
+                offset = 0
+                while offset < collectionsize:
+                    eelist  = collection.toList(100, offset)
+                    offset += 100
+                    print(eelist.size().getInfo())
+                    #
+                    # stack multiple single-band images into single multi-band image - exports faster than separate images
+                    #
+                    def addimagebandstostack(nextimage, previousstack):
+                        nextimage = ee.Image(nextimage)
+                        return ee.Image(previousstack).addBands(nextimage.rename(nextimage.date().format('YYYY-MM-dd')))
+                    stackedimage = ee.Image(eelist.iterate(addimagebandstostack, ee.Image().select()))
+            
+                    #
+                    # filenames - again
+                    #    file_per_band = True will create separate images per band, thereby appending .bandname to the filename parameter
+                    #    => files will be: szfilename.bandname.tif
+                    #
+                    if 1 < len(szbandnames):
+                        # multi band images collection (exceptional)
+                        szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}_{szbandname}.tif")
+                    else:
+                        # single band images collection (expected)
+                        szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}.tif")
+                    geemap.ee_export_image(
+                        stackedimage,
+                        filename      = szfilename,
+                        scale         = exportscale,
+                        region        = exportregion,
+                        file_per_band = True)
+        except Exception as e:
+            if verbose: print(f"{str(type(self).__name__)}.exportimagestacks - unhandled exception: {str(e)}")
+            return False
+
+        return True
+
     
     """
     """
