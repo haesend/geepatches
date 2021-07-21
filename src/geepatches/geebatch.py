@@ -16,19 +16,19 @@ import geeexport
 #
 #
 do_S2ndvi              = True
-do_S2fapar             = True
-do_S2scl               = True
+do_S2fapar             = False
+do_S2scl               = False
 do_S2sclconvmask       = True
-do_S2tcirgb            = True
+do_S2tcirgb            = False
 
-do_S1sigma0            = True
+do_S1sigma0            = False
 do_S1gamma0            = True
-do_S1rvi               = True
+do_S1rvi               = False
 
-do_PV333ndvi           = True
-do_PV333sm             = True
-do_PV333smsimplemask   = True
-do_PV333rgb            = True
+do_PV333ndvi           = False
+do_PV333sm             = False
+do_PV333smsimplemask   = False
+do_PV333rgb            = False
 
 
 #
@@ -44,7 +44,7 @@ class GEEExporter():
         #    using sentinel 2 20m as reference
         #
         refcol    = geeproduct.GEECol_s2scl()
-        refcolpix = 64
+        refcolpix = 128
         #
         #    heuristics for other products
         #
@@ -114,11 +114,11 @@ def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname).3s {%(module)s:%(funcName)s:%(lineno)d} - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
   
     szyyyycropyear   = '2019'
-    szshapefile      = r"D:\data\ref\field_selection\test_fields_sample\2019_250testfields.shp"
-    #szshapefile      = r"/data/CropSAR/data/ref/shp/testfields/2019_250testfields.shp"
+    #szshapefile      = r"D:\data\ref\field_selection\test_fields_sample\2019_250testfields.shp"
+    szshapefile      = r"/vitodata/CropSAR/data/ref/shp/testfields/2019_250testfields.shp"
 
     szyyyymmddfrom   = str(int(szyyyycropyear)    )  + "-01-01" 
-    szyyyymmddtill   = str(int(szyyyycropyear)    )  + "-02-01"
+    szyyyymmddtill   = str(int(szyyyycropyear) + 1)  + "-01-01"
     #
     #    have pandas read the shapefile which is assumed to have fieldID
     #
@@ -129,7 +129,8 @@ def main():
     #    root output dir on system
     #
     szoutputdir     = r"C:\tmp"
-    #szoutputdir     = r"/data/CropSAR/tmp/dominique"
+    szoutputdir = os.path.join(os.path.expanduser("~"), "tmp")
+    szoutputdir     = r"/vitodata/CropSAR/tmp/dominique"
     
     #
     #    root output dir for tool : ..\geebatch
@@ -161,9 +162,20 @@ def main():
     #
     #
     #
+    datetime_tick_all  = datetime.datetime.now()
     exporter = GEEExporter()
+    docontinue = True
     try:
         for fieldId, field in parcelsgeodataframe.iterrows():
+            if fieldId == "000028085AF2E0B9":
+                print( "skipping " + fieldId)
+                docontinue = False
+                continue
+            if docontinue :
+                print( "skipping " + fieldId)
+                continue
+            print("executing " + fieldId)
+            
             datetime_tick  = datetime.datetime.now()
 
             shapelygeometry = field['geometry']
@@ -192,6 +204,7 @@ def main():
         #
         #    remove handler we added at function start
         #
+        logging.info(f"Total {int( (datetime.datetime.now()-datetime_tick_all).total_seconds()/60/60)} hours")
         logging.getLogger().removeHandler(logfilehandler)
 
 
