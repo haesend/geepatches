@@ -90,9 +90,12 @@ class GEEExporter():
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
             geeexport.GEEExp().exportseparateimagestodrive(geecollection, verbose=verbose)
         
-    def exportimagestackstodrive(self, eepoint, eedatefrom, eedatetill, szoutputdir, verbose=False):
+    def exportimagestackstodrive(self, eepoint, eedatefrom, eedatetill, szgooglething, verbose=False):
+        result = True
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
-            geeexport.GEEExp().exportimagestackstodrive(geecollection, verbose=verbose)
+            result = result and geeexport.GEEExp().exportimagestackstodrive(geecollection, szgooglething, verbose=verbose)
+        return result
+
 #
 #
 #
@@ -101,8 +104,9 @@ def xmain():
     eedatefrom        = geeutils.half31UESday #fleecycloudsday
     eedatetill        = eedatefrom.advance(1, 'year')
     verbose           = False    
+    szdrivefolder = f"geebatch\\2000\\0000"
     #GEEExporter().exportseparateimagestodrive(eepoint, eedatefrom, eedatetill, "C:/tmp/", verbose)
-    GEEExporter().exportimagestackstodrive(eepoint, eedatefrom, eedatetill, "C:/tmp/", verbose)
+    GEEExporter().exportimagestackstodrive(eepoint, eedatefrom, eedatetill, szdrivefolder, verbose)
     #GEEExporter().exportimagestacks(eepoint, eedatefrom, eedatetill, "C:/tmp/", verbose)
     #GEEExporter().exportseparateimages(eepoint, eedatefrom, eedatetill, "C:/tmp2/", verbose)
 
@@ -111,11 +115,13 @@ def xmain():
 #
 #
 def main():
+    dotolocaldrive = False
+    
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname).3s {%(module)s:%(funcName)s:%(lineno)d} - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
   
-    szyyyycropyear   = '2019'
-    #szshapefile      = r"D:\data\ref\field_selection\test_fields_sample\2019_250testfields.shp"
-    szshapefile      = r"/vitodata/CropSAR/data/ref/shp/testfields/2019_250testfields.shp"
+    szyyyycropyear   = '2020'
+    szshapefile      = r"D:\data\ref\field_selection\test_fields_sample\2019_250testfields.shp"
+    #szshapefile      = r"/vitodata/CropSAR/data/ref/shp/testfields/2019_250testfields.shp"
 
     szyyyymmddfrom   = str(int(szyyyycropyear)    )  + "-01-01" 
     szyyyymmddtill   = str(int(szyyyycropyear) + 1)  + "-01-01"
@@ -126,52 +132,69 @@ def main():
     parcelsgeodataframe.set_index( 'fieldID', inplace=True, verify_integrity=True)
     parcelsgeodataframe.to_crs(epsg=4326, inplace=True)
     #
-    #    root output dir on system
     #
-    szoutputdir     = r"C:\tmp"
-    szoutputdir = os.path.join(os.path.expanduser("~"), "tmp")
-    szoutputdir     = r"/vitodata/CropSAR/tmp/dominique"
-    
     #
-    #    root output dir for tool : ..\geebatch
-    #
-    szoutputdir = os.path.normpath(szoutputdir)
-    if not os.path.isdir(szoutputdir) : raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
-    szoutputdir = os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3]}")
-    if not os.path.isdir(szoutputdir) : 
-        os.mkdir(szoutputdir)
-        if not os.path.isdir(szoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
-        os.chmod(szoutputdir, 0o777)
-    #
-    #    logging to file: ..\geebatch\geebatch_19990101_20000101.log
-    #
-    szoutputbasename=os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3] + '_' + szyyyymmddfrom + '_' + szyyyymmddtill}")
-    logfilehandler = logging.FileHandler(szoutputbasename + ".log")
-    logfilehandler.setFormatter(logging.Formatter('%(asctime)s %(levelname).4s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-    logging.getLogger().addHandler(logfilehandler)
-    #
-    #    output dir for run (cropyear) : ..\geebatch\1999
-    #
-    szoutputdir = os.path.normpath(szoutputdir)
-    if not os.path.isdir(szoutputdir) : raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
-    szoutputdir = os.path.join(szoutputdir, szyyyycropyear)
-    if not os.path.isdir(szoutputdir) : 
-        os.mkdir(szoutputdir)
-        if not os.path.isdir(szoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
-        os.chmod(szoutputdir, 0o777)
+    if dotolocaldrive:
+        #
+        #    root output dir on system
+        #
+        szoutputdir     = r"C:\tmp"
+        szoutputdir = os.path.join(os.path.expanduser("~"), "tmp")
+        szoutputdir     = r"/vitodata/CropSAR/tmp/dominique"
+        
+        #
+        #    root output dir for tool : ..\geebatch
+        #
+        szoutputdir = os.path.normpath(szoutputdir)
+        if not os.path.isdir(szoutputdir) : raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+        szoutputdir = os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3]}")
+        if not os.path.isdir(szoutputdir) : 
+            os.mkdir(szoutputdir)
+            if not os.path.isdir(szoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
+            os.chmod(szoutputdir, 0o777)
+        #
+        #    logging to file: ..\geebatch\geebatch_19990101_20000101.log
+        #
+        szoutputbasename=os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3] + '_' + szyyyymmddfrom + '_' + szyyyymmddtill}")
+        logfilehandler = logging.FileHandler(szoutputbasename + ".log")
+        logfilehandler.setFormatter(logging.Formatter('%(asctime)s %(levelname).4s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+        logging.getLogger().addHandler(logfilehandler)
+
+        #
+        #    output dir for run (cropyear) : ..\geebatch\1999
+        #
+        szoutputdir = os.path.normpath(szoutputdir)
+        if not os.path.isdir(szoutputdir) : raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+        szoutputdir = os.path.join(szoutputdir, szyyyycropyear)
+        if not os.path.isdir(szoutputdir) : 
+            os.mkdir(szoutputdir)
+            if not os.path.isdir(szoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
+            os.chmod(szoutputdir, 0o777)
+
+    else:
+        #
+        #    logging to file: ..\geebatch\geebatch_19990101_20000101.log
+        #
+        szoutputbasename=os.path.join(os.path.dirname(__file__), f"{os.path.basename(__file__)[0:-3] + '_' + szyyyymmddfrom + '_' + szyyyymmddtill}")
+        logfilehandler = logging.FileHandler(szoutputbasename + ".log")
+        logfilehandler.setFormatter(logging.Formatter('%(asctime)s %(levelname).4s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+        logging.getLogger().addHandler(logfilehandler)
+
+        szgooglething = "" #"f"{os.path.basename(__file__)[0:-3]}"
+        szgooglething = szyyyycropyear
     #
     #
     #
     datetime_tick_all  = datetime.datetime.now()
     exporter = GEEExporter()
-    docontinue = True
+    doskip   = False
     try:
         for fieldId, field in parcelsgeodataframe.iterrows():
             if fieldId == "000028085AF2E0B9":
                 print( "skipping " + fieldId)
-                docontinue = False
+                doskip = False
                 continue
-            if docontinue :
+            if doskip :
                 print( "skipping " + fieldId)
                 continue
             print("executing " + fieldId)
@@ -182,16 +205,20 @@ def main():
             shapelypoint    = shapelygeometry.centroid
             eepoint         = ee.Geometry.Point(shapelypoint.x, shapelypoint.y)
 
-            #
-            #    output dir per field : ..\geebatch\1999\0000280859BE7A17
-            #
-            szfieldoutputdir = os.path.join(szoutputdir, fieldId)
-            if not os.path.isdir(szfieldoutputdir) : 
-                os.mkdir(szfieldoutputdir)
-                if not os.path.isdir(szfieldoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
-                os.chmod(szfieldoutputdir, 0o777)
+            if dotolocaldrive:
+                #
+                #    output dir per field : ..\geebatch\1999\0000280859BE7A17
+                #
+                szfieldoutputdir = os.path.join(szoutputdir, fieldId)
+                if not os.path.isdir(szfieldoutputdir) : 
+                    os.mkdir(szfieldoutputdir)
+                    if not os.path.isdir(szfieldoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
+                    os.chmod(szfieldoutputdir, 0o777)
+                result = exporter.exportimagestacks(eepoint, ee.Date(szyyyymmddfrom), ee.Date(szyyyymmddtill), szfieldoutputdir)
 
-            result = exporter.exportimagestacks(eepoint, ee.Date(szyyyymmddfrom), ee.Date(szyyyymmddtill), szfieldoutputdir)
+            else:
+                szgooglefieldthing = szgooglething + "_" + fieldId
+                result = exporter.exportimagestackstodrive(eepoint, ee.Date(szyyyymmddfrom), ee.Date(szyyyymmddtill), szgooglefieldthing)
 
             if result:
                 logging.info(f"fieldId {fieldId}: SUCCESS {int((datetime.datetime.now()-datetime_tick).total_seconds())} seconds")

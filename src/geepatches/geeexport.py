@@ -53,7 +53,7 @@ class GEEExp(object):
 
         SLEEPTOOMUCHTASKSSECONDS = 120
         SLEEPAFTEREXCEPTION      = 120
-        MAXACTIVETASKS           = 20
+        MAXACTIVETASKS           = 250
         MAXATTEMPTS              = 2
 
         def _activertaskscount():
@@ -195,6 +195,7 @@ class GEEExp(object):
                         scale         = exportscale,
                         region        = exportregion,
                         file_per_band = True)
+
         except Exception as e:
             if verbose: print(f"{str(type(self).__name__)}.exportimagestacks - unhandled exception: {str(e)}")
             return False
@@ -262,59 +263,66 @@ class GEEExp(object):
     
     """
     """
-    def exportimagestackstodrive(self, eeimagecollection, szfilenameprefix="", verbose=False):
-        #
-        #    TODO - folder
-        #
-#         #
-#         # - normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
-#         # - verfify the path is an existing directory
-#         #
-#         szoutputdir = os.path.normpath(szoutputdir)
-#         if not os.path.isdir(szoutputdir) :
-#             raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
-        #
-        #
-        #
-        exportregion, exportscale, szcollectiondescription, szbandnames = self._getcommonexportparams(eeimagecollection, verbose=verbose)
-        #
-        #
-        #
-        for szbandname in szbandnames:
-            collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
-            collectionsize = collection.size().getInfo()
-        
-            if verbose: print(f"{str(type(self).__name__)}.exportimagestackstodrive - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
-
+    def exportimagestackstodrive(self, eeimagecollection, szgooglething, szfilenameprefix="", verbose=False):
+        try:
+    
             #
-            #    TODO: are there limits to number of bands in export to drive?
+            #    TODO - folder
             #
-            def addimagebandstostack(nextimage, previousstack):
-                nextimage = ee.Image(nextimage)
-                return ee.Image(previousstack).addBands(nextimage.rename(nextimage.date().format('YYYY-MM-dd')))
-            stackedimage = ee.Image(collection.iterate(addimagebandstostack, ee.Image().select()))
+    #         #
+    #         # - normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
+    #         # - verfify the path is an existing directory
+    #         #
+    #         szoutputdir = os.path.normpath(szoutputdir)
+    #         if not os.path.isdir(szoutputdir) :
+    #             raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+            #
+            #
+            #
+            exportregion, exportscale, szcollectiondescription, szbandnames = self._getcommonexportparams(eeimagecollection, verbose=verbose)
+            #
+            #
+            #
+            for szbandname in szbandnames:
+                collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
+                collectionsize = collection.size().getInfo()
+            
+                if verbose: print(f"{str(type(self).__name__)}.exportimagestackstodrive - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
+    
+                #
+                #    TODO: are there limits to number of bands in export to drive?
+                #
+                def addimagebandstostack(nextimage, previousstack):
+                    nextimage = ee.Image(nextimage)
+                    return ee.Image(previousstack).addBands(nextimage.rename(nextimage.date().format('YYYY-MM-dd')))
+                stackedimage = ee.Image(collection.iterate(addimagebandstostack, ee.Image().select()))
+    
+                if 1 < len(szbandnames):
+                    # multi band images collection (exceptional)
+                    szfilename  = f"{szfilenameprefix}{szcollectiondescription}_{szbandname}_{szgooglething}"
+                else:
+                    # single band images collection (expected)
+                    szfilename  = f"{szfilenameprefix}{szcollectiondescription}_{szgooglething}"
+    
+                eetask = ee.batch.Export.image.toDrive(
+                    image          = stackedimage,
+                    region         = exportregion,
+                    description    = szfilename[0:50],
+                    folder         = "geepatches",
+                    scale          = exportscale,
+                    skipEmptyTiles = False,
+                    fileNamePrefix = szfilename,
+                    fileFormat     = 'GeoTIFF')
+    
+                if not self._starteetask(eetask):
+                    if verbose: print(f"{str(type(self).__name__)}.exportimagestackstodrive: abandoned.")
+                    return False
 
-            if 1 < len(szbandnames):
-                # multi band images collection (exceptional)
-                szfilename  = f"{szfilenameprefix}{szcollectiondescription}_{szbandname}"
-            else:
-                # single band images collection (expected)
-                szfilename  = f"{szfilenameprefix}{szcollectiondescription}"
+        except Exception as e:
+            if verbose: print(f"{str(type(self).__name__)}.exportimagestackstodrive - unhandled exception: {str(e)}")
+            return False
 
-            eetask = ee.batch.Export.image.toDrive(
-                image          = stackedimage,
-                region         = exportregion,
-                description    = szfilename,
-                folder         = f"geepatches",
-                scale          = exportscale,
-                skipEmptyTiles = False,
-                fileNamePrefix = szfilename,
-                fileFormat     = 'GeoTIFF')
-
-            if not self._starteetask(eetask):
-                if verbose: print(f"{str(type(self).__name__)}.exportimagestackstodrive: abandoned.")
-                return False
-
+        return True
 
 # 
 # 
