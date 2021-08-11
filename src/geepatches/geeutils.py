@@ -134,9 +134,13 @@ tapspoint       = ee.Geometry.Point(5.07924, 51.21848)  # where we work
 pannekoekpoint  = ee.Geometry.Point(5.16577, 51.23480)  # where there are pannekoeken
 tennvenlopoint  = ee.Geometry.Point(6.19947, 51.37140)  # special 4-S2-tile point (at the tennisclub in Venlo)
 half31UESpoint  = ee.Geometry.Point(3.56472, 50.83872)  # border of S2 31UES tile on 2020-01-29
+hoogeheydepoint = ee.Geometry.Point(4.91380, 51.20715)  # point near bobspoint, 2-S1-DESC tiles edge on 2018-07-25, 2-S1-ASC tiles on 2018-07-16
+pastacosipoint  = ee.Geometry.Point(3.98940, 50.49995)  # point somwhere around Mons, 2-S1-DESC tiles edge on 2018-02-24 (about 25% of observations in 2018)
 
 fleecycloudsday = ee.Date('2018-07-12')                 # schapewolkjes over Belgium
 half31UESday    = ee.Date('2020-01-29')                 # S2 31UES only upper left containing data
+hoogeheydeASCday= ee.Date('2018-07-16')                 # 2-S1-ASC  tiles edge @hoogeheydepoint
+hoogeheydeDESday= ee.Date('2018-07-25')                 # 2-S1-DESC tiles edge @hoogeheydepoint
 
 """
 some convenience functions to create test images
@@ -397,6 +401,16 @@ def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
         raise ValueError("szmethod must be specified as one of 'mosaic', 'mean', 'max', 'min', 'mode', 'median")
 
     #
+    #
+    #
+    if eeimagecollection.size().getInfo() <= 0:
+        #
+        #    return empty collection as is to avoid weird ee.ee_exception.EEException-s
+        #    TODO: would using ee.Algorithms.If be significant faster? one server-client swap less?
+        #
+        if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) empty input collection - return as-is")
+        return eeimagecollection
+    #
     #    sort: to be sure of a reproducable collection - add day-granular 'gee_date' as property ( format('YYYY-MM-dd') takes care of 'day-granularity')
     #
     eeimagecollection = eeimagecollection.sort('system:time_start').map(lambda image: image.set('gee_date', ee.Date(image.date().format('YYYY-MM-dd'))))
@@ -482,14 +496,16 @@ def stackcollectiontoimage(eeimagecollection, verbose=False):
     return ee.Image(stackedimage)
 
 
-def firstImageSince(eeimagecollection, date, dateincluded=True, verbose=False):
+def firstImageSince(eeimagecollection, date, eepoint=None, dateincluded=True, verbose=False):
     """
-    select single image in collection: first since date specified (searches next year only)
+    select single image in collection covering the eepoint.: first since date specified (searches next year only)
     mainly for testpurposes
-    BEWARE: in case the collection has not been filtered a priori by some geometry
+    BEWARE: eepoint is optional, if not specified, and
+            in case the collection has not been filtered a priori by some geometry
             one never knows where in the world this 'first' image will be found,
             but there's a good chance it will not be where you're actually looking.
     """
+    if eepoint is not None: eeimagecollection = eeimagecollection.filterBounds(eepoint)
     eedate  = ee.Date(date) if dateincluded else ee.Date(date).advance(1, 'day')
     eeimage = (eeimagecollection
                .filter(ee.Filter.date(eedate, eedate.advance(1, 'year')))
@@ -500,7 +516,8 @@ def firstImageSince(eeimagecollection, date, dateincluded=True, verbose=False):
     return eeimage
 
 
-def lastImageBefore(eeimagecollection, date, dateincluded=True, verbose=False):
+def lastImageBefore(eeimagecollection, date, eepoint=None, dateincluded=True, verbose=False):
+    if eepoint is not None: eeimagecollection = eeimagecollection.filterBounds(eepoint)
     eedate  = ee.Date(date).advance(1, 'day') if dateincluded else ee.Date(date)
     eeimage = (eeimagecollection
                .filter(ee.Filter.date(eedate.advance(-1, 'year'), eedate))
@@ -672,6 +689,33 @@ def szimagecollectioninfo(eeimagecollection, verbose=True):
 
 
     return sz
+
+
+def szimagesperdateinfo(eeimagecollection):
+    """
+    count number of images per date in collection
+    """
+    #
+    #    sort: to be sure of a reproducable collection - add day-granular 'gee_date' as property ( format('YYYY-MM-dd') takes care of 'day-granularity')
+    #
+    eeimagecollection = eeimagecollection.sort('system:time_start').map(lambda image: image.set('gee_date', ee.Date(image.date().format('YYYY-MM-dd'))))
+    #
+    #    map-able list of distinct dates 
+    #
+    eelistdistinctdates = ee.List(eeimagecollection.distinct('gee_date').aggregate_array('gee_date'))
+    #
+    #    iterator function to build string
+    #    
+    def addline(sznextdate, previousstring):
+        count = eeimagecollection.filter(ee.Filter.date(ee.Date(sznextdate), ee.Date(sznextdate).advance(1,'day'))).size()
+        return (ee.String(previousstring)
+                .cat("date: ")
+                .cat(ee.Date(sznextdate).format('YYYY-MM-dd'))
+                .cat(" images: ")
+                .cat(count.format("%d") )
+                .cat("\n"))
+
+    return eelistdistinctdates.iterate(addline, ee.String('')).getInfo()
 
 
 def szprojectioninfo(eeproj):
