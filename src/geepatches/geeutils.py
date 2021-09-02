@@ -227,7 +227,10 @@ def pixelcenterpoint(eepoint, eerefimage):
 def pixelinterspoint(eepoint, eerefimage):
     """
     intersection of pixels (raster) in the reference image close to the eepoint
-
+    remark:
+        this method does not give the 'nearest' intersection: scale(2, 2) will double the
+        pixels in size, next the center of the result is used. these centers coincide (only) with
+        the "odd" intersections in the original scale. hence the "even" intersections will never be used.
     BEWARE: eerefimage must have one single band, or all bands must have identical projections.
     """
     return (pixelcenterpoint(eepoint, eerefimage.reproject(eerefimage.projection().scale(2, 2)))
