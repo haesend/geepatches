@@ -12,6 +12,128 @@ import math
 
 """
 """
+def exportimages(eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
+    """
+    """
+    try:
+        #
+        # check szoutputdir
+        #    normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
+        #    verify the path is an existing directory
+        #
+        szoutputdir = os.path.normpath(szoutputdir)
+        if not os.path.isdir(szoutputdir) :
+            raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
+        #
+        # retrieve properties from GEECol eeimagecollection
+        #    GEECol imagecollections are supposed to have these properties available
+        #    - 'gee_refroi'      : ee.Geometry - used as region parameter for exports
+        #    - 'gee_centerpoint' : ee.Geometry.Point - debug
+        #    - 'gee_projection'  : ee.Projection - used to shrink the exported region a little, and to find the scale parameter for exports
+        #    - 'gee_description' : string - used to brew filenames for exports
+        #
+        eeregion     = ee.Geometry(eeimagecollection.get('gee_refroi'))
+        eeprojection = ee.Projection(eeimagecollection.get('gee_projection'))
+        #
+        # everlasting war between pixel_as_surface vs pixel_as_point: 
+        #    - export seems to use 'pixel_as_point'
+        #    - our roi represents the pixel_as_surface bounding box
+        #    - rounding errors can introduce an extra row/column in our exported image
+        #    => shrinking the original roi with 10% of its own pixel size and prayer might take care of this
+        #
+        exportregion = eeregion.buffer(-0.1, proj=eeprojection)
+        exportscale  = eeprojection.nominalScale()
+        #
+        # description will be used in filenames
+        #
+        szcollectiondescription = eeimagecollection.get('gee_description').getInfo()
+        #
+        # list of band names 
+        #    normal GEECol collections are expected to be single-band
+        #    in case there are more, each band is exported separately
+        #
+        szbandnames = eeimagecollection.aggregate_array('system:band_names').flatten().distinct().getInfo()        
+        #
+        # actual export - per band
+        #
+        for szbandname in szbandnames:
+            collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
+            collectionsize = collection.size().getInfo()
+        
+            if verbose: print(f"exportimages.exportimagestacks - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
+    
+            #
+            # download 
+            #    getDownloadURL downloads a zipped GeoTIFF
+            #    max file size for getDownloadURL is 32MB
+            #    loop per 100 - "Number of bands (xxx) must be less than or equal to 100."
+            #    remark: since 2014 Earth Engine has been nagging getDownloadURL should be deprecated 
+            #
+            nrbands = 100
+            offset  = 0
+            while offset < collectionsize:
+                eelist  = collection.toList(nrbands, offset)
+                offset += nrbands
+                #
+                # stack multiple single-band images into single multi-band image 
+                #    - exports faster than separate images
+                #    - remark:
+                #        Noel Gorelick doen't approve of iteration over bands; one should use ee.ImageCollection.toBands
+                #        ee.ImageCollection.toBands uses its own band naming convention
+                #        so we'd need yet another step to rename our bands
+                #        besides that, worldcereal/worldcover uses similar iterations, and it works. ha!
+                #
+                def addimagebandstostack(nextimage, previousstack):
+                    nextimage = ee.Image(nextimage)
+                    return ee.Image(previousstack).addBands(nextimage.rename(nextimage.date().format('YYYY-MM-dd')))
+                stackedimage = ee.Image(eelist.iterate(addimagebandstostack, ee.Image().select()))
+                #
+                # filenames - again
+                #    file_per_band = True will create separate images per band, thereby appending .bandname to the filename parameter
+                #    => files will be: szfilename.bandname.tif - bandname being 'YYYY-MM-dd'
+                #
+                if 1 < len(szbandnames):
+                    # multi band images collection (exceptional)
+                    szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}_{szbandname}.tif")
+                else:
+                    # single band images collection (expected)
+                    szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}.tif")
+                #
+                # export it (using geemap.ee_export_image, which uses ee.Image.getDownloadURL
+                # remark: file_per_band (or filePerBand in getDownloadURL) must be True, because the band names get lost
+                #    they could be restored afterwards via gdal, but where would it all end...
+                #
+                #        import osgeo.gdal
+                #        src_ds = osgeo.gdal.Open(szfilename)
+                #        dst_ds = src_ds.GetDriver().CreateCopy(szfilename + ".tmp.tif", src_ds)
+                #        #
+                #        #    restore band descriptions which are mysteriously lost in the ee.Image.getDownloadURL (current versions: ee 0.1.248, gee 0.8.12)
+                #        #
+                #        lstbandnames = exportimage.bandNames().getInfo()
+                #        for iband in range(src_ds.RasterCount):
+                #            dst_ds.GetRasterBand(iband+1).SetDescription(lstbandnames[iband])
+                #        ...
+                #
+                # TODO: we could just copy the geemap.ee_export_image code here
+                #    this would not only remove a dependency
+                #    but could also include some error checking/retry/message/... iso the geemap.ee_export_image 'print' output
+                #
+                geemap.ee_export_image(
+                    stackedimage,
+                    filename      = szfilename,
+                    scale         = exportscale,
+                    region        = exportregion,
+                    file_per_band = True)
+
+    except Exception as e:
+        print(f"exportimages.exportimagestacks - unhandled exception: {str(e)}")
+        return False
+
+    return True
+
+
+"""
+"""
 class GEEExp(object):
     """
     """
@@ -146,18 +268,21 @@ class GEEExp(object):
         """
         try:
             #
-            # - normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
-            # - verfify the path is an existing directory
+            # check szoutputdir
+            #    normalize the path (remove redundant separators, collapse up-level references, handle everlasting '/' '\', ...)
+            #    verify the path is an existing directory
             #
             szoutputdir = os.path.normpath(szoutputdir)
             if not os.path.isdir(szoutputdir) :
                 raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")
             #
-            #
+            # retrieve properties from GEECol imagecollection
             #
             exportregion, exportscale, szcollectiondescription, szbandnames = self._getcommonexportparams(eeimagecollection, verbose=verbose)
             #
-            #
+            # loop over bands
+            #    normally these collections contain but one band,  
+            #    in case there are more, each band is exported separately
             #
             for szbandname in szbandnames:
                 collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
@@ -165,11 +290,19 @@ class GEEExp(object):
             
                 if verbose: print(f"{str(type(self).__name__)}.exportimagestacks - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
         
-                offset = 0
+                #
+                # download 
+                #    getDownloadURL downloads a zipped GeoTIFF
+                #    max filesize for getDownloadURL is 32MB
+                #    loop per 100 - "Number of bands (xxx) must be less than or equal to 100."
+                #    remark: since 2014 Earth Engine has been nagging getDownloadURL should be deprecated 
+                #
+                nrbands = 100
+                offset  = 0
                 while offset < collectionsize:
-                    eelist  = collection.toList(100, offset)
-                    offset += 100
-                    print(eelist.size().getInfo())
+                    eelist  = collection.toList(nrbands, offset)
+                    offset += nrbands
+                    print(collectionsize, eelist.size().getInfo())
                     #
                     # stack multiple single-band images into single multi-band image - exports faster than separate images
                     #
@@ -201,7 +334,79 @@ class GEEExp(object):
             return False
 
         return True
-
+    
+#         
+#         def ee_export_image(
+#             ee_object, filename, scale=None, crs=None, region=None, file_per_band=False
+#         ):
+#             """Exports an ee.Image as a GeoTIFF.
+#         
+#             Args:
+#                 ee_object (object): The ee.Image to download.
+#                 filename (str): Output filename for the exported image.
+#                 scale (float, optional): A default scale to use for any bands that do not specify one; ignored if crs and crs_transform is specified. Defaults to None.
+#                 crs (str, optional): A default CRS string to use for any bands that do not explicitly specify one. Defaults to None.
+#                 region (object, optional): A polygon specifying a region to download; ignored if crs and crs_transform is specified. Defaults to None.
+#                 file_per_band (bool, optional): Whether to produce a different GeoTIFF per band. Defaults to False.
+#             """
+#             import requests
+#             import zipfile
+#         
+#             if not isinstance(ee_object, ee.Image):
+#                 print("The ee_object must be an ee.Image.")
+#                 return
+#         
+#             filename = os.path.abspath(filename)
+#             basename = os.path.basename(filename)
+#             name = os.path.splitext(basename)[0]
+#             filetype = os.path.splitext(basename)[1][1:].lower()
+#             filename_zip = filename.replace(".tif", ".zip")
+#         
+#             if filetype != "tif":
+#                 print("The filename must end with .tif")
+#                 return
+#         
+#             try:
+#                 print("Generating URL ...")
+#                 params = {"name": name, "filePerBand": file_per_band}
+#                 if scale is None:
+#                     scale = ee_object.projection().nominalScale().multiply(10)
+#                 params["scale"] = scale
+#                 if region is None:
+#                     region = ee_object.geometry()
+#                 params["region"] = region
+#                 if crs is not None:
+#                     params["crs"] = crs
+#         
+#                 url = ee_object.getDownloadURL(params)
+#                 print("Downloading data from {}\nPlease wait ...".format(url))
+#                 r = requests.get(url, stream=True)
+#         
+#                 if r.status_code != 200:
+#                     print("An error occurred while downloading.")
+#                     return
+#         
+#                 with open(filename_zip, "wb") as fd:
+#                     for chunk in r.iter_content(chunk_size=1024):
+#                         fd.write(chunk)
+#         
+#             except Exception as e:
+#                 print("An error occurred while downloading.")
+#                 print(e)
+#                 return
+#         
+#             try:
+#                 z = zipfile.ZipFile(filename_zip)
+#                 z.extractall(os.path.dirname(filename))
+#                 z.close()
+#                 os.remove(filename_zip)
+#         
+#                 if file_per_band:
+#                     print("Data downloaded to {}".format(os.path.dirname(filename)))
+#                 else:
+#                     print("Data downloaded to {}".format(filename))
+#             except Exception as e:
+#                 print(e)
     
     """
     """
