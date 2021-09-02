@@ -175,7 +175,11 @@ class GEECol(object):
         determine reference projection (to obtain specified resolution)
         collect the specified ee.ImageCollection
         reproject and rescale this ee.ImageCollection
-        add properties gee_refroi and gee_projection
+        add some properties to the resulting collection:
+            - 'gee_refroi'      : ee.Geometry - used as region parameter for exports
+            - 'gee_centerpoint' : ee.Geometry.Point - debug
+            - 'gee_projection'  : ee.Projection - used to shrink the exported region a little, and to find the scale parameter for exports
+            - 'gee_description' : string - used to brew filenames for exports
         """
 
         #
@@ -341,7 +345,7 @@ class GEECol_s2ndvi(GEECol, OrdinalProjectable):
         """
         eeimagecollection = eeimagecollection.map(lambda image: (image
                                                                  .clamp(-1,1)           # clamp looses properties 
-                                                                 .toFloat()             # actually obsolete here
+                                                                 .toFloat()             # should be obsolete here, but side effect is no-data as -inf or nan iso 0
                                                                  .copyProperties(image)
                                                                  .copyProperties(image, ['system:time_start'])))
 #         #
@@ -792,7 +796,7 @@ class GEECol_pv333ndvi(GEECol, OrdinalProjectable):
         """
         eeimagecollection = eeimagecollection.map(lambda image: (image
                                                                  .clamp(-1,1)           # clamp looses properties 
-                                                                 .toFloat()             # actually obsolete here
+                                                                 .toFloat()             # should be obsolete here, but side effect is no-data as -inf or nan iso 0
                                                                  .copyProperties(image)
                                                                  .copyProperties(image, ['system:time_start'])))
 
