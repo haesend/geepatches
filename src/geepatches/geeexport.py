@@ -38,6 +38,8 @@ class GEEExp(object):
     - exportimagestack:        exports the images stacked as bands in a multiband image to a local directory
     - exportimagestodrive:     exports the separate images to the google drive
     - exportimagestacktodrive: exports the images stacked as bands in a multiband image to the google drive
+
+    exportimagestodrive - should only be used for very 'short' timeseries, otherwise the ee.batch.Task.start() overhead is far too large.
     """
 
     """
@@ -260,7 +262,7 @@ class GEEExp(object):
                 if verbose: print(f"{str(type(self).__name__)}.exportimages - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize} success")
     
         except Exception as e:
-            print(f"{str(type(self).__name__)}.exportimages - unhandled exception: {str(e)}")
+            print(f"{str(type(self).__name__)}.exportimagestacks - unhandled exception: {str(e)}")
             raise
     
         return True
@@ -271,6 +273,13 @@ class GEEExp(object):
         """
         """
         import osgeo.gdal
+        #
+        # trying to avoid irrelevant gdal warnings
+        #    opening multiband exported file complains:  "Warning 1: TIFFReadDirectory:Sum of Photometric type-related color channels and ExtraSamples doesn't match SamplesPerPixel..."
+        #    SetNoDataValue on multiband copy complains: "Warning 1: Setting nodata to nan on band 1, but band 2 has nodata at -inf.
+        #
+        osgeo.gdal.UseExceptions()                           # considering all this nonsense
+        osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')  # one might be tempted to use rasterio
 
         try:
             #
@@ -333,7 +342,7 @@ class GEEExp(object):
                     # we'll try to restore them via gdal ... nice.
                     #
                     src_ds = osgeo.gdal.Open(szfilename)
-                    dst_ds = src_ds.GetDriver().CreateCopy(szfilename + ".tmp.tif", src_ds, options = ['COMPRESS=DEFLATE'])
+                    dst_ds = src_ds.GetDriver().CreateCopy(szfilename + ".tmp.tif", src_ds, options = ['COMPRESS=DEFLATE', 'PHOTOMETRIC=MINISBLACK'])
                     #
                     #    restore band descriptions which are mysteriously lost in the ee.Image.getDownloadURL (current versions: ee 0.1.248, gee 0.8.12)
                     #
@@ -349,9 +358,9 @@ class GEEExp(object):
                             rasterArray = dst_ds.GetRasterBand(iband+1).ReadAsArray()
                             rasterArray[rasterArray == -math.inf] = math.nan
                             dst_ds.GetRasterBand(iband+1).WriteArray(rasterArray)
-                            dst_ds.GetRasterBand(iband+1).SetNoDataValue(math.nan)
+                            if (iband == 0) : dst_ds.GetRasterBand(iband+1).SetNoDataValue(math.nan)
                     #
-                    #    cleanup
+                    #    cleanup - beware: this is bound to crash when you're viewing "previous" files e.g. in qgis.
                     #
                     dst_ds = None
                     src_ds = None
