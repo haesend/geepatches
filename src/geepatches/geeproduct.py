@@ -348,17 +348,33 @@ class GEECol_s2ndvi(GEECol, OrdinalProjectable):
                                                                  .toFloat()             # should be obsolete here, but side effect is no-data as -inf or nan iso 0
                                                                  .copyProperties(image)
                                                                  .copyProperties(image, ['system:time_start'])))
-#         #
-#         #    historical vito ndvi scaling [ -0.08, 0.92 ] -> [0, 250] with 255 as no-data
-#         #
-#         eeimagecollection = eeimagecollection.map(lambda image: (image
-#                                                                  .add(0.08).multiply(250).clamp(0,250)
-#                                                                  .unmask(255, False)
-#                                                                  .toUint8()
-#                                                                  .copyProperties(image)
-#                                                                  .copyProperties(image, ['system:time_start'])))
         return eeimagecollection
-        
+
+
+"""
+GEECol_s2ndvi with historical vito ndvi scaling
+"""
+class GEECol_s2ndvi_he(GEECol_s2ndvi):
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        """
+        """
+        return super().collect(eeroi, eedatefrom, eedatetill, verbose=verbose).set('gee_description', 'S2ndvi_he')
+
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        """
+        #
+        #    historical vito ndvi scaling [ -0.08, 0.92 ] -> [0, 250] with 255 as no-data
+        #
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .add(0.08).multiply(250).clamp(0,250)
+                                                                 .unmask(255, False)
+                                                                 .toUint8()
+                                                                 .copyProperties(image)
+                                                                 .copyProperties(image, ['system:time_start'])))
+        return eeimagecollection        
+
 
 """
 """
@@ -403,16 +419,32 @@ class GEECol_s2fapar(GEECol, OrdinalProjectable):
                                                                  .toFloat()             # otherwise would be double (Float64)
                                                                  .copyProperties(image)
                                                                  .copyProperties(image, ['system:time_start'])))
-#         #
-#         #    historical vito fapar scaling [ 0, 1 ] -> [0, 200] with 255 as no-data
-#         #
-#         eeimagecollection = eeimagecollection.map(lambda image: (image
-#                                                                  .multiply(200).clamp(0,200)
-#                                                                  .unmask(255, False)
-#                                                                  .toUint8()
-#                                                                  .copyProperties(image)
-#                                                                  .copyProperties(image, ['system:time_start'])))
         return eeimagecollection
+
+
+"""
+GEECol_s2fapar with historical vito fapar scaling
+"""
+class GEECol_s2fapar_he(GEECol_s2fapar):
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        """
+        """
+        return super().collect(eeroi, eedatefrom, eedatetill, verbose=verbose).set('gee_description', 'S2fapar_he')
+
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        """
+        #
+        #    historical vito fapar scaling [ 0, 1 ] -> [0, 200] with 255 as no-data
+        #
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .multiply(200).clamp(0,200)
+                                                                 .unmask(255, False)
+                                                                 .toUint8()
+                                                                 .copyProperties(image)
+                                                                 .copyProperties(image, ['system:time_start'])))
+        return eeimagecollection  
 
 
 """
@@ -587,7 +619,7 @@ class GEECol_s1sigma0(GEECol, UserProjectable):
         self.szband = szband
 
         if not szorbitpass in ['ASC', 'ASCENDING', 'DES', 'DESCENDING']:
-            raise ValueError("band must be specified as one of 'ASCENDING'(or 'ASC'), 'DESCENDING'(or 'DES')")
+            raise ValueError("orbitpass must be specified as one of 'ASCENDING'(or 'ASC'), 'DESCENDING'(or 'DES')")
         if szorbitpass == 'ASC': szorbitpass = 'ASCENDING'
         if szorbitpass == 'DES': szorbitpass = 'DESCENDING'
         self.szorbitpass = szorbitpass
@@ -799,18 +831,32 @@ class GEECol_pv333ndvi(GEECol, OrdinalProjectable):
                                                                  .toFloat()             # should be obsolete here, but side effect is no-data as -inf or nan iso 0
                                                                  .copyProperties(image)
                                                                  .copyProperties(image, ['system:time_start'])))
-
-#         #
-#         #    historical vito ndvi scaling [ -0.08, 0.92 ] -> [0, 250] with 255 as no-data
-#         #
-#         eeimagecollection = eeimagecollection.map(lambda image: (image
-#                                                                  .add(0.08).multiply(250).clamp(0,250)
-#                                                                  .unmask(255, False)
-#                                                                  .toUint8()
-#                                                                  .copyProperties(image)
-#                                                                  .copyProperties(image, ['system:time_start'])))
-        
         return eeimagecollection
+
+
+"""
+GEECol_pv333ndvi with historical vito ndvi scaling
+"""
+class GEECol_pv333ndvi_he(GEECol_pv333ndvi):
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        """
+        """
+        return super().collect(eeroi, eedatefrom, eedatetill, verbose=verbose).set('gee_description', 'PV333ndvi_he')
+
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        """
+        #
+        #    historical vito ndvi scaling [ -0.08, 0.92 ] -> [0, 250] with 255 as no-data
+        #
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .add(0.08).multiply(250).clamp(0,250)
+                                                                 .unmask(255, False)
+                                                                 .toUint8()
+                                                                 .copyProperties(image)
+                                                                 .copyProperties(image, ['system:time_start'])))
+        return eeimagecollection 
 
 
 """
