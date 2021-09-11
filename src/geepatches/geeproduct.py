@@ -171,6 +171,17 @@ class GEECol(object):
 
     def getcollection(self, eedatefrom, eedatetill, eepoint, roipixelsindiameter, refcollection=None, refroipixelsdiameter=None, doscaleandflag=True, verbose=False):
         """
+        wrap _getcollection to allow some retries to avoid sporadic "ee.ee_exception.EEException: Computation timed out."
+        """
+        return geeutils.wrapretry(
+            self._getcollection, 
+            args=(eedatefrom, eedatetill, eepoint, roipixelsindiameter),
+            kwargs={'refcollection':refcollection, 'refroipixelsdiameter':refroipixelsdiameter, 'doscaleandflag':doscaleandflag, 'verbose':verbose},
+            attempts=3, backoffseconds=60, backofffactor=2, verbose=verbose)
+
+
+    def _getcollection(self, eedatefrom, eedatetill, eepoint, roipixelsindiameter, refcollection=None, refroipixelsdiameter=None, doscaleandflag=True, verbose=False):
+        """
         determine reference roi (to obtain product patches congruent with reference product)
         determine reference projection (to obtain specified resolution)
         collect the specified ee.ImageCollection

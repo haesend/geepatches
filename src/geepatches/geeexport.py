@@ -171,9 +171,20 @@ class GEEExp(object):
             if verbose: print(f"{str(type(self).__name__)}._geemap_ee_export_image - An error occurred while unzipping: Exception({str(e)})")
             raise
 
+
     """
     """
     def exportimages(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
+        """
+        wrap _exportimages to allow some retries to avoid sporadic "ee.ee_exception.EEException: Computation timed out."
+        """
+        return geeutils.wrapretry(
+            self._exportimages, 
+            args=(eeimagecollection, szoutputdir),
+            kwargs={'szfilenameprefix':szfilenameprefix, 'verbose':verbose},
+            attempts=3, backoffseconds=60, backofffactor=2, verbose=verbose)
+
+    def _exportimages(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
         """
         """
         try:
@@ -267,9 +278,20 @@ class GEEExp(object):
     
         return True
 
+
     """
     """
     def exportimagestack(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
+        """
+        wrap _exportimages to allow some retries to avoid sporadic "ee.ee_exception.EEException: Computation timed out."
+        """
+        return geeutils.wrapretry(
+            self._exportimagestack, 
+            args=(eeimagecollection, szoutputdir),
+            kwargs={'szfilenameprefix':szfilenameprefix, 'verbose':verbose},
+            attempts=3, backoffseconds=60, backofffactor=2, verbose=verbose)
+
+    def _exportimagestack(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
         """
         """
         import osgeo.gdal

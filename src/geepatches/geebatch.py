@@ -300,15 +300,13 @@ def export_shape(cfgproducts, cfgexports):
 
 """
 """
-if __name__ == '__main__':
-    print('starting main')
-
+def main():
     #
     #    performance exportimages vs exportimagestack and S2ndvi vs S2ndvi_he
     #
     cfgproducts = CfgProducts()
     cfgexports  = CfgExports()
-    if True:
+    while True:
         cfgproducts.clear(); cfgproducts.do_S2ndvi = True
         cfgexports.clear(); cfgexports.do_exportimages = True
         export_shape(cfgproducts, cfgexports)
@@ -321,6 +319,11 @@ if __name__ == '__main__':
         cfgexports.clear(); cfgexports.do_exportimagestack = True
         export_shape(cfgproducts, cfgexports)
         
+"""
+"""
+if __name__ == '__main__':
+    print('starting main')
+    main()
     print('finishing main')
 
 

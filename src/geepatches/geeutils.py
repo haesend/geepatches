@@ -8,6 +8,8 @@ if not ee.data._credentials: ee.Initialize()
 import pathlib
 import datetime
 import multiprocessing
+import time
+import logging
 
 
 
@@ -625,6 +627,65 @@ def wrapasprocess(func, args=(), kwargs={}, *, timeout=5, attempts=1, verbose=Fa
             return False # exit from endless (with 'False' - failed)
         # do retry
         if verbose: print(f"wrapasprocess: attempt {attempt-1} FAILED - retry") 
+
+
+def wrapretry(func, args=(), kwargs={}, *, attempts=3, backoffseconds=10, backofffactor=1, verbose=False):
+    """
+    execute a function and allow for retries.
+    
+    :param func: the target function to be wrapped
+    :param args: the argument tuple for the target invocation. Defaults to ()
+    :param kwargs: a dictionary of keyword arguments for the target invocation. Defaults to {}
+    :param attempts: maximum number of retries. Defaults to 3
+    :param backoffseconds: backoff time before retry in seconds. Defaults to 10.
+    :param backofffactor: increase backoff time for each attempt by multiplying previous value with backofffactor. Defaults to 1.
+    :param verbose: print debug information if True. Defaults to False
+
+    """
+    if False:
+        #
+        #    debug only (actually: won't even work for json ComputedObject's)
+        #
+        print(f"wrapretry:        func: {func.__name__}")
+        for iIdx, arg in enumerate(args): print(f"        args {iIdx}: {str(arg)}")
+        for key, value in kwargs.items(): print(f"        kwargs key {str(key)}: {str(value)}")
+        print(f"        attempts: {attempts}")
+        print(f"        backoff : {backoffseconds}")
+        print(f"        bofactor: {backofffactor}")
+        print(f"        verbose : {verbose}")
+
+    for attempt in range(1, attempts+1):
+
+        if (attempt > 1):
+            if verbose: print(f"wrapretry( {func.__name__} ) - sleep {backoffseconds} seconds before retry")
+            time.sleep(backoffseconds)
+            backoffseconds = backoffseconds*backofffactor
+
+        try:
+            if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} starts")
+            result = func(*args, **kwargs)
+            if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} SUCCESS")
+            if (attempt > 1): logging.info(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} SUCCESS")
+            break
+        except TypeError  as e:
+            #
+            #    assuming there is no sense in retrying in case of TypeError: probably syntax fault in signature
+            #
+            raise
+        except Exception as e:
+            #
+            #    might be more specific, but  where would it all end...
+            #
+            if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED")
+            logging.warning(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED: Exception({str(e)})")
+            last_exception = e
+
+    else: # for - else (for loop did not 'break')
+        if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED - re-raising last Exception({str(last_exception)})")
+        logging.error(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED - re-raising last Exception({str(last_exception)})")
+        raise last_exception
+
+    return result
 
 
 #
