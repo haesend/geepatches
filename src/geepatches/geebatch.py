@@ -16,80 +16,16 @@ import geeexport
 #
 #
 IAMRUNNINGONTHEMEP = False
-
 #
-#    relevant products
 #
-class CfgProducts(object):
-
-    def __init__(self):
-        self.clear()
-    
-    def clear(self):
-        self.do_S2ndvi              = False
-        self.do_S2ndvi_he           = False
-        self.do_S2fapar             = False
-        self.do_S2fapar_he          = False
-        self.do_S2scl               = False
-        self.do_S2sclconvmask       = False
-        self.do_S2tcirgb            = False
-        
-        self.do_S1sigma0            = False
-        self.do_S1gamma0            = False
-        self.do_S1rvi               = False
-        
-        self.do_PV333ndvi           = False
-        self.do_PV333ndvi_he        = False
-        self.do_PV333sm             = False
-        self.do_PV333smsimplemask   = False
-        self.do_PV333rgb            = False
-
-    def szcfg(self):
-        sz = ""
-        if self.do_S2ndvi:            sz += "S2ndvi "
-        if self.do_S2ndvi_he:         sz += "S2ndvi_he "
-        if self.do_S2fapar:           sz += "S2fapar "
-        if self.do_S2fapar_he:        sz += "S2fapar_he "
-        if self.do_S2scl:             sz += "S2scl "
-        if self.do_S2sclconvmask:     sz += "S2sclconvmask "
-        if self.do_S2tcirgb:          sz += "S2tcirgb "
-
-        if self.do_S1sigma0:          sz += "S1sigma0 "
-        if self.do_S1gamma0:          sz += "S1gamma0 "
-        if self.do_S1rvi:             sz += "S1rvi "
-
-        if self.do_PV333ndvi:         sz += "PV333ndvi "
-        if self.do_PV333ndvi_he:      sz += "PV333ndvi_he "
-        if self.do_PV333sm:           sz += "PV333sm "
-        if self.do_PV333smsimplemask: sz += "PV333smsimplemask "
-        if self.do_PV333rgb:          sz += "PV333rgb "
-        return sz
-
 #
-#    relevant methods
+EXPORTABLEPRODUCTS = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2scl", "S2sclconvmask", "S2tcirgb",
+                      "S1sigma0", "S1gamma0", "S1rvi",
+                      "PV333ndvi", "PV333ndvi_he", "PV333sm", "PV333smsimplemask", "PV333rgb"]
 #
-class CfgExports(object):
-
-    def __init__(self):
-        self.clear()
-    
-    def clear(self):
-        self.do_exportimages            = False  # advised for export to local system
-        self.do_exportimagestack        = False  # discouraged 
-        self.do_exportimagestodrive     = False  # discouraged: use only for very short timeseries (e.g. single date)
-        self.do_exportimagestacktodrive = False  # advised for export to google drive
-
-    def szcfg(self):
-        sz = ""
-        if self.do_exportimages:            sz += "exportimages "
-        if self.do_exportimagestack:        sz += "exportimagestack "
-        if self.do_exportimagestodrive:     sz += "exportimagestodrive "
-        if self.do_exportimagestacktodrive: sz += "exportimagestacktodrive "
-        return sz
-
-
-
-
+#
+#
+EXPORTMETHODS = ["exportimages", "exportimagestack", "exportimagestodrive", "exportimagestacktodrive"]
 #
 #    q&d demonstrator
 #
@@ -97,13 +33,19 @@ class GEEExporter():
     #
     #
     #
-    def __init__(self, cfgproducts):
-        self._cfgproducts = cfgproducts
+    def __init__(self, *szproducts):
+        self.szproducts = []
+        assert (0 < len(szproducts))                   # at least one product
+        if isinstance(szproducts, str) : 
+            szproducts = [szproducts]
+        for szproduct in szproducts:
+            assert (szproduct in EXPORTABLEPRODUCTS)   # only known products
+            if szproduct not in self.szproducts:
+                self.szproducts.append(szproduct)
     #
     #
     #
     def _getgeecollections(self, eedatefrom, eedatetill, eepoint, verbose=False):
-        
         #
         #    using sentinel 2 20m as reference
         #
@@ -119,70 +61,74 @@ class GEEExporter():
         #
         #    generator
         #
-        if self._cfgproducts.do_S2ndvi           : yield geeproduct.GEECol_s2ndvi().getcollection(             eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S2ndvi_he        : yield geeproduct.GEECol_s2ndvi_he().getcollection(          eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S2fapar          : yield geeproduct.GEECol_s2fapar().getcollection(            eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S2fapar_he       : yield geeproduct.GEECol_s2fapar_he().getcollection(         eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S2scl            : yield geeproduct.GEECol_s2scl().getcollection(              eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S2sclconvmask    : yield geeproduct.GEECol_s2sclconvmask().getcollection(      eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S2tcirgb         : yield geeproduct.GEECol_s2rgb().getcollection(              eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
-
-        if self._cfgproducts.do_S1sigma0         : yield geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S1sigma0         : yield geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S1sigma0         : yield geeproduct.GEECol_s1sigma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S1sigma0         : yield geeproduct.GEECol_s1sigma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S1gamma0         : yield geeproduct.GEECol_s1gamma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S1gamma0         : yield geeproduct.GEECol_s1gamma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S1gamma0         : yield geeproduct.GEECol_s1gamma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S1gamma0         : yield geeproduct.GEECol_s1gamma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_S1rvi            : yield geeproduct.GEECol_s1rvi().getcollection(              eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        
-        if self._cfgproducts.do_PV333ndvi        : yield geeproduct.GEECol_pv333ndvi().getcollection(          eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_PV333ndvi_he     : yield geeproduct.GEECol_pv333ndvi_he().getcollection(       eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_PV333sm          : yield geeproduct.GEECol_pv333sm().getcollection(            eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_PV333smsimplemask: yield geeproduct.GEECol_pv333simplemask().getcollection(    eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
-        if self._cfgproducts.do_PV333rgb         : yield geeproduct.GEECol_pv333rgb().getcollection(           eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)     
-    
+        if "S2ndvi" in self.szproducts           : yield geeproduct.GEECol_s2ndvi().getcollection(             eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2ndvi_he" in self.szproducts        : yield geeproduct.GEECol_s2ndvi_he().getcollection(          eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2fapar" in self.szproducts          : yield geeproduct.GEECol_s2fapar().getcollection(            eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2fapar_he" in self.szproducts       : yield geeproduct.GEECol_s2fapar_he().getcollection(         eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2scl" in self.szproducts            : yield geeproduct.GEECol_s2scl().getcollection(              eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2sclconvmask" in self.szproducts    : yield geeproduct.GEECol_s2sclconvmask().getcollection(      eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2tcirgb" in self.szproducts         : yield geeproduct.GEECol_s2rgb().getcollection(              eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+ 
+        if "S1sigma0" in self.szproducts         : yield geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1sigma0" in self.szproducts         : yield geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1sigma0" in self.szproducts         : yield geeproduct.GEECol_s1sigma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1sigma0" in self.szproducts         : yield geeproduct.GEECol_s1sigma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1gamma0" in self.szproducts         : yield geeproduct.GEECol_s1gamma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1gamma0" in self.szproducts         : yield geeproduct.GEECol_s1gamma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1gamma0" in self.szproducts         : yield geeproduct.GEECol_s1gamma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1gamma0" in self.szproducts         : yield geeproduct.GEECol_s1gamma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1rvi" in self.szproducts            : yield geeproduct.GEECol_s1rvi().getcollection(              eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+         
+        if "PV333ndvi" in self.szproducts        : yield geeproduct.GEECol_pv333ndvi().getcollection(          eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
+        if "PV333ndvi_he" in self.szproducts     : yield geeproduct.GEECol_pv333ndvi_he().getcollection(       eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
+        if "PV333sm" in self.szproducts          : yield geeproduct.GEECol_pv333sm().getcollection(            eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
+        if "PV333smsimplemask" in self.szproducts: yield geeproduct.GEECol_pv333simplemask().getcollection(    eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
+        if "PV333rgb" in self.szproducts         : yield geeproduct.GEECol_pv333rgb().getcollection(           eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)     
+     
     def exportimages(self, eepoint, eedatefrom, eedatetill, szoutputdir, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
             geeexport.GEEExp().exportimages(geecollection, szoutputdir, szfilenameprefix=szfilenameprefix, verbose=verbose)
-
+ 
     def exportimagestack(self, eepoint, eedatefrom, eedatetill, szoutputdir, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
             geeexport.GEEExp().exportimagestack(geecollection, szoutputdir, szfilenameprefix=szfilenameprefix, verbose=verbose)
-
+ 
     def exportimagestodrive(self, eepoint, eedatefrom, eedatetill, szgdrivefolder, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
             geeexport.GEEExp().exportimagestodrive(geecollection, szgdrivefolder, szfilenameprefix=szfilenameprefix, verbose=verbose)
-        
+         
     def exportimagestacktodrive(self, eepoint, eedatefrom, eedatetill, szgdrivefolder, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
             geeexport.GEEExp().exportimagestacktodrive(geecollection, szgdrivefolder, szfilenameprefix=szfilenameprefix, verbose=verbose)
 
-#
-#
-#
-def export_point(cfgproducts, cfgexports):
 
-    
+#
+#
+#
+def export_point(lstszproducts, lstszmethods):
+    if isinstance(lstszproducts, str) : lstszproducts = [lstszproducts]
+    if isinstance(lstszmethods, str)  : lstszmethods  = [lstszmethods]
+
     eepoint           = geeutils.half31UESpoint #bobspoint #tennvenlopoint
     eedatefrom        = geeutils.half31UESday   #fleecycloudsday
     eedatetill        = eedatefrom.advance(1, 'week')
-    verbose           = False    
-
+    verbose           = True    
+ 
     szoutputdir       = r"/vitodata/CropSAR/tmp/dominique" if IAMRUNNINGONTHEMEP else r"C:\tmp"
     szgdrivedir       = f"{os.path.basename(__file__)[0:-3]}"
+ 
+    geeexporter = GEEExporter(*lstszproducts)
+    if "exportimages"            in lstszmethods: geeexporter.exportimages           (eepoint, eedatefrom, eedatetill, szoutputdir, verbose=verbose)
+    if "exportimagestack"        in lstszmethods: geeexporter.exportimagestack       (eepoint, eedatefrom, eedatetill, szoutputdir, verbose=verbose)
+    if "exportimagestodrive"     in lstszmethods: geeexporter.exportimagestodrive    (eepoint, eedatefrom, eedatetill, szgdrivedir, verbose=verbose)
+    if "exportimagestacktodrive" in lstszmethods: geeexporter.exportimagestacktodrive(eepoint, eedatefrom, eedatetill, szgdrivedir, verbose=verbose)
 
-    geeexporter = GEEExporter(cfgproducts)
-    if cfgexports.do_exportimages:            geeexporter.exportimages           (eepoint, eedatefrom, eedatetill, szoutputdir, verbose=verbose)
-    if cfgexports.do_exportimagestack:        geeexporter.exportimagestack       (eepoint, eedatefrom, eedatetill, szoutputdir, verbose=verbose)
-    if cfgexports.do_exportimagestodrive:     geeexporter.exportimagestodrive    (eepoint, eedatefrom, eedatetill, szgdrivedir, verbose=verbose)
-    if cfgexports.do_exportimagestacktodrive: geeexporter.exportimagestacktodrive(eepoint, eedatefrom, eedatetill, szgdrivedir, verbose=verbose)
-
 #
 #
 #
-def export_shape(cfgproducts, cfgexports):
+def export_shape(lstszproducts, lstszmethods):
+    if isinstance(lstszproducts, str) : lstszproducts = [lstszproducts]
+    if isinstance(lstszmethods, str)  : lstszmethods  = [lstszmethods]
     #
     #
     #
@@ -220,6 +166,12 @@ def export_shape(cfgproducts, cfgexports):
     #
     szgdrivedir = f"{os.path.basename(__file__)[0:-3]}"
     #
+    #
+    #
+    exporter           = GEEExporter(*lstszproducts)
+    eedatefrom         = ee.Date(szyyyymmddfrom)
+    eedatetill         = ee.Date(szyyyymmddtill)
+    #
     #    logging to file - e.g: C:\tmp\geebatch\geebatch_19990101_20000101.log
     #
     szoutputbasename=os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3] + '_' + szyyyymmddfrom + '_' + szyyyymmddtill}")
@@ -231,8 +183,8 @@ def export_shape(cfgproducts, cfgexports):
     #
     logging.info(" ")
     logging.info(f"{os.path.basename(__file__)[0:-3]}")
-    logging.info(f"    products:  {cfgproducts.szcfg()}")
-    logging.info(f"    exports:   {cfgexports.szcfg()}")
+    logging.info(f"    products:  {exporter.szproducts}")
+    logging.info(f"    exports:   {lstszmethods}")
     logging.info(f"    shapefile: {os.path.basename(szshapefile)}")
     logging.info(f"    from: {szyyyymmddfrom} till: {szyyyymmddtill}")
     logging.info(f"    parcels: {numberofparcels}")
@@ -241,12 +193,6 @@ def export_shape(cfgproducts, cfgexports):
     #    get circus on the road
     #
     datetime_tick_all  = datetime.datetime.now()
-    exporter           = GEEExporter(cfgproducts)
-    eedatefrom         = ee.Date(szyyyymmddfrom)
-    eedatetill         = ee.Date(szyyyymmddtill)
-    #
-    #
-    #
     doskip   = False # hack in case we were interrupted
     try:
         icountparcels = 0
@@ -260,7 +206,7 @@ def export_shape(cfgproducts, cfgexports):
 
             datetime_tick = datetime.datetime.now()
             icountparcels += 1
-            if (icountparcels > 3): return
+            if (icountparcels > 2): return
             #
             #
             #
@@ -270,7 +216,7 @@ def export_shape(cfgproducts, cfgexports):
             #
             #
             #
-            if (cfgexports.do_exportimages or cfgexports.do_exportimagestack):
+            if ("exportimages" in lstszmethods or "exportimagestack" in lstszmethods):
                 #
                 #    specific output directory per field e.g: C:\tmp\geebatch\0000280859BE7A17
                 #
@@ -279,14 +225,14 @@ def export_shape(cfgproducts, cfgexports):
                     os.mkdir(szfieldoutputdir)
                     if not os.path.isdir(szfieldoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
                     os.chmod(szfieldoutputdir, 0o777)
-                if cfgexports.do_exportimages:     exporter.exportimages(eepoint, eedatefrom, eedatetill, szfieldoutputdir, verbose=verbose)
-                if cfgexports.do_exportimagestack: exporter.exportimagestack(eepoint, eedatefrom, eedatetill, szfieldoutputdir, verbose=verbose)
+                if "exportimages"     in lstszmethods: exporter.exportimages(eepoint, eedatefrom, eedatetill, szfieldoutputdir, verbose=verbose)
+                if "exportimagestack" in lstszmethods: exporter.exportimagestack(eepoint, eedatefrom, eedatetill, szfieldoutputdir, verbose=verbose)
             #
             #    toDrive will prepend the filenames with the fieldId
             #
             szfilenameprefix = str(fieldId) + "_"
-            if cfgexports.do_exportimagestodrive:     exporter.exportimagestodrive(eepoint, eedatefrom, eedatetill, szgdrivedir, szfilenameprefix=szfilenameprefix, verbose=verbose)
-            if cfgexports.do_exportimagestacktodrive: exporter.exportimagestacktodrive(eepoint, eedatefrom, eedatetill, szgdrivedir, szfilenameprefix=szfilenameprefix, verbose=verbose)
+            if "exportimagestodrive"     in lstszmethods: exporter.exportimagestodrive(eepoint, eedatefrom, eedatetill, szgdrivedir, szfilenameprefix=szfilenameprefix, verbose=verbose)
+            if "exportimagestacktodrive" in lstszmethods: exporter.exportimagestacktodrive(eepoint, eedatefrom, eedatetill, szgdrivedir, szfilenameprefix=szfilenameprefix, verbose=verbose)
 
             logging.info(f"export field {fieldId} ({icountparcels} of {numberofparcels}) done - {int((datetime.datetime.now()-datetime_tick).total_seconds())} seconds")
 
@@ -304,26 +250,18 @@ def main():
     #
     #    performance exportimages vs exportimagestack and S2ndvi vs S2ndvi_he
     #
-    cfgproducts = CfgProducts()
-    cfgexports  = CfgExports()
-    while True:
-        cfgproducts.clear(); cfgproducts.do_S2ndvi = True
-        cfgexports.clear(); cfgexports.do_exportimages = True
-        export_shape(cfgproducts, cfgexports)
-        cfgexports.clear(); cfgexports.do_exportimagestack = True
-        export_shape(cfgproducts, cfgexports)
-    
-        cfgproducts.clear(); cfgproducts.do_S2ndvi_he = True
-        cfgexports.clear(); cfgexports.do_exportimages = True
-        export_shape(cfgproducts, cfgexports)
-        cfgexports.clear(); cfgexports.do_exportimagestack = True
-        export_shape(cfgproducts, cfgexports)
-        
+    #export_shape(["S2ndvi", "S2ndvi_he"], ["exportimages", "exportimagestack"])
+
+    allproducts = ["S2ndvi", "S2fapar", "S2scl", "S2sclconvmask",
+                      "S1gamma0",
+                      "PV333ndvi", "PV333smsimplemask"]
+
+    for szproduct in allproducts:
+        export_shape([szproduct], ["exportimages", "exportimagestack", "exportimagestacktodrive"])
 """
 """
 if __name__ == '__main__':
     print('starting main')
     main()
     print('finishing main')
-
 

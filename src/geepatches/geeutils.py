@@ -632,6 +632,11 @@ def wrapasprocess(func, args=(), kwargs={}, *, timeout=5, attempts=1, verbose=Fa
 def wrapretry(func, args=(), kwargs={}, *, attempts=3, backoffseconds=10, backofffactor=1, verbose=False):
     """
     execute a function and allow for retries.
+    example:
+        def foo(a, k=0, verbose=False):
+            ...
+            return res
+        res = wrapretry(foo, args=(1,), kwargs={'k1':1, 'verbose':True), attempts=2, backoffseconds=60, verbose=True)
     
     :param func: the target function to be wrapped
     :param args: the argument tuple for the target invocation. Defaults to ()

@@ -39,7 +39,13 @@ class GEEExp(object):
     - exportimagestodrive:     exports the separate images to the google drive
     - exportimagestacktodrive: exports the images stacked as bands in a multiband image to the google drive
 
-    exportimagestodrive - should only be used for very 'short' timeseries, otherwise the ee.batch.Task.start() overhead is far too large.
+    For local downloads: prefer exportimages; 
+        exportimagestack seems slower, due to splitting the collection to meet the maximum-bands-per-image limit,
+         and due to the additional osgeo.gdal manipulations to restore the bandnames.
+    
+    For export to google drive: prefer exportimagestacktodrive; 
+        exportimagestodrive should only be used for very 'short' timeseries, otherwise the ee.batch.Task.start()
+        overhead (per image) is far too large.
     """
 
     """
@@ -47,7 +53,6 @@ class GEEExp(object):
     def _getgeecolproperties(self, eeimagecollection, verbose=False):
         """
         helper method to retrieve parameters needed for export, from the GEECol imagecollection properties:
-        
         """
         #
         # retrieve properties from GEECol eeimagecollection
@@ -124,7 +129,7 @@ class GEEExp(object):
                 params["crs"] = crs
     
             #
-            #    retries might solve sporadic download failures ?
+            #    retries might solve sporadic download failures ? - TODO: use geeutils.wrapretry instead of local implementation?
             #
             MAXATTEMPTS = 3
             DELAY       = 10
@@ -173,6 +178,7 @@ class GEEExp(object):
 
 
     """
+    exports the separate images to a local directory
     """
     def exportimages(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
         """
@@ -182,7 +188,7 @@ class GEEExp(object):
             self._exportimages, 
             args=(eeimagecollection, szoutputdir),
             kwargs={'szfilenameprefix':szfilenameprefix, 'verbose':verbose},
-            attempts=3, backoffseconds=60, backofffactor=2, verbose=verbose)
+            attempts=9, backoffseconds=60, backofffactor=2, verbose=verbose) # max 1 + 2 + ... + 128 = 255 minutes
 
     def _exportimages(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
         """
@@ -247,20 +253,7 @@ class GEEExp(object):
                         # single band images collection (expected)
                         szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}.tif")
                     #
-                    # export it (using (local) geemap.ee_export_image (clone), which uses ee.Image.getDownloadURL
-                    # remark: file_per_band (or filePerBand in getDownloadURL) must be True, because the band names get lost
-                    #    they could be restored afterwards via gdal, but where would it all end...
-                    #
-                    #        import osgeo.gdal
-                    #        src_ds = osgeo.gdal.Open(szfilename)
-                    #        dst_ds = src_ds.GetDriver().CreateCopy(szfilename + ".tmp.tif", src_ds)
-                    #        #
-                    #        #    restore band descriptions which are mysteriously lost in the ee.Image.getDownloadURL (current versions: ee 0.1.248, gee 0.8.12)
-                    #        #
-                    #        lstbandnames = exportimage.bandNames().getInfo()
-                    #        for iband in range(src_ds.RasterCount):
-                    #            dst_ds.GetRasterBand(iband+1).SetDescription(lstbandnames[iband])
-                    #        ...
+                    # export it (using (local) geemap.ee_export_image (clone), which uses ee.Image.getDownloadURL)
                     #
                     self._geemap_ee_export_image(
                         stackedimage,
@@ -280,6 +273,7 @@ class GEEExp(object):
 
 
     """
+    exports the images stacked as bands in a multiband image to a local directory
     """
     def exportimagestack(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
         """
@@ -289,7 +283,7 @@ class GEEExp(object):
             self._exportimagestack, 
             args=(eeimagecollection, szoutputdir),
             kwargs={'szfilenameprefix':szfilenameprefix, 'verbose':verbose},
-            attempts=3, backoffseconds=60, backofffactor=2, verbose=verbose)
+            attempts=9, backoffseconds=60, backofffactor=2, verbose=verbose) # max 1 + 2 + ... + 128 = 255 minutes
 
     def _exportimagestack(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
         """
@@ -456,7 +450,9 @@ class GEEExp(object):
             if verbose: print(f"{str(type(self).__name__)}._starteetask(attempt:{iattempt}): exception - exits")
             return False      
 
+
     """
+    exports the separate images to the google drive (discouraged unless for very short time series, e.g. single date)
     """
     def exportimagestodrive(self, eeimagecollection, szgdrivefolder, szfilenameprefix="", verbose=False):
         """
@@ -518,7 +514,9 @@ class GEEExp(object):
     
         return True
 
+
     """
+    exports the images stacked as bands in a multiband image to the google drive
     """
     def exportimagestacktodrive(self, eeimagecollection, szgdrivefolder, szfilenameprefix="", verbose=False):
         """

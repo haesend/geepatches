@@ -177,7 +177,7 @@ class GEECol(object):
             self._getcollection, 
             args=(eedatefrom, eedatetill, eepoint, roipixelsindiameter),
             kwargs={'refcollection':refcollection, 'refroipixelsdiameter':refroipixelsdiameter, 'doscaleandflag':doscaleandflag, 'verbose':verbose},
-            attempts=3, backoffseconds=60, backofffactor=2, verbose=verbose)
+            attempts=9, backoffseconds=60, backofffactor=2, verbose=verbose) # max 1 + 2 + ... + 128 = 255 minutes
 
 
     def _getcollection(self, eedatefrom, eedatetill, eepoint, roipixelsindiameter, refcollection=None, refroipixelsdiameter=None, doscaleandflag=True, verbose=False):
