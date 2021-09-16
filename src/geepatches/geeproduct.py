@@ -213,14 +213,13 @@ class GEECol(object):
             _eerefimage = geeutils.someImageNear(_eerefimagecollection, eedatefrom, eepoint).select(0)
             #
             #    this weird call is expected to throw in case no _eerefimage can be found (e.g. due to empty _eerefimagecollection)
-            #    for some strange reason the _eerefimage will have type ee.Image, even if it is not there
+            #    for strange reason the _eerefimage will have type ee.Image, even if it is not there
             #    and even then some calls will pass, while others will throw. 
             #
             if (_eerefimage.bandNames().size().getInfo() > 0): pass
         except Exception as e:
-            if verbose: print(f"{str(type(self).__name__)}.getcollection: exception:  {str(e)}")
-            print(f"{str(type(self).__name__)}.getcollection: no reference image found - bailing out")
-            return None # TODO: return code, None, Exception, ...
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: no reference image found. Exception:  {str(e)}")
+            raise ValueError(f"{str(type(self).__name__)}.getcollection: no reference image found.")
         if verbose: print(f"{str(type(self).__name__)}.getcollection: selected reference image:\n{geeutils.szprojectioninfo(_eerefimage)} id:{_eerefimage.id().getInfo()}")
 
         #
@@ -271,8 +270,8 @@ class GEECol(object):
         #
         _eenatimagecollection = self.collect(_eerefroi, eedatefrom, eedatetill, verbose=verbose)
         if _eenatimagecollection is None:
-            print(f"{str(type(self).__name__)}.getcollection: destination collection is empty - bailing out")
-            return None
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: destination collection is empty - bailing out")
+            raise ValueError(f"{str(type(self).__name__)}.getcollection: destination collection is empty.")
         #
         # reproject it, to align pixel boundaries with reference roi, in resolution specified by roipixelsindiameter
         #

@@ -15,6 +15,7 @@ import geeexport
 #
 #
 IAMRUNNINGONTHEMEP = False
+
 #
 #    available products
 #
@@ -25,6 +26,7 @@ EXPORTABLEPRODUCTS = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2scl", "
 #    available methods
 #
 EXPORTMETHODS = ["exportimages", "exportimagestack", "exportimagestodrive", "exportimagestacktodrive"]
+
 #
 #    sanity check products - playing with variable-length arguments
 #
@@ -38,6 +40,7 @@ def saneproducts(*szproducts):
         if szproduct not in saneproducts:                                        # no duplicates
             saneproducts.append(szproduct)
     return saneproducts
+
 #
 #    sanity check methods
 #
@@ -52,19 +55,29 @@ def sanemethods(*szmethods):
             sanemethods.append(szmethod)
     return sanemethods
 
-#
-#    q&d demonstrator
-#
+"""
+demonstrater: exporter
+    hosting all export methods
+    configurable for a list of products, 
+    specifies S2 20m (GEECol_s2scl()) as referenc collection
+    eexporting 1280m (64 pix) diameter roi's
+"""
 class GEEExporter():
     #
     #
     #
     def __init__(self, *szproducts):
+        """
+        e.g. exporter = GEEExporter("S2ndvi", "S1sigma0")
+        """
         self.szproducts = saneproducts(*szproducts)
     #
     #
     #
     def _getgeecollections(self, eedatefrom, eedatetill, eepoint, verbose=False):
+        """
+        generator yielding collections for specifed products
+        """
         #
         #    using sentinel 2 20m as reference
         #
@@ -103,7 +116,10 @@ class GEEExporter():
         if "PV333sm"           in self.szproducts: yield geeproduct.GEECol_pv333sm().getcollection(            eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
         if "PV333smsimplemask" in self.szproducts: yield geeproduct.GEECol_pv333simplemask().getcollection(    eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
         if "PV333rgb"          in self.szproducts: yield geeproduct.GEECol_pv333rgb().getcollection(           eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)     
-     
+
+    #
+    #    export methods
+    #     
     def exportimages(self, eepoint, eedatefrom, eedatetill, szoutputdir, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
             geeexport.GEEExp().exportimages(geecollection, szoutputdir, szfilenameprefix=szfilenameprefix, verbose=verbose)
@@ -121,10 +137,13 @@ class GEEExporter():
             geeexport.GEEExp().exportimagestacktodrive(geecollection, szgdrivefolder, szfilenameprefix=szfilenameprefix, verbose=verbose)
 
 
-#
-#
-#
+"""
+demonstrator - including logging & furniture: simple export for single point
+"""
 def export_point(lstszproducts, lstszmethods, szdatefrom, szdatetill, pointlon, pointlat, szoutputdir, szgdrivedir=None, verbose=False):
+    """
+    e.g.: export_point(["S2ndvi", "S1sigma0"], "exportimages", "2019-01-01", "2020-01-01", 4.90782, 51.20069, r"C:\tmp")
+    """
     #
     #
     #
@@ -207,10 +226,14 @@ def export_point(lstszproducts, lstszmethods, szdatefrom, szdatetill, pointlon, 
         logging.info(f"{os.path.basename(__file__)[0:-3]} export field {szid} done - {int((datetime.datetime.now()-datetime_tick_all).total_seconds())} seconds")
         logging.getLogger().removeHandler(logfilehandler)
 
-#
-#
-#
+
+"""
+demonstrator - including logging & furniture: export for centroids of CropSAR-I field shapefiles
+"""
 def export_shape(lstszproducts, lstszmethods, szyyyyyear, szshapefile, szoutputdir, szgdrivedir=None, verbose=False):
+    """
+    e.g.: export_shape(["S2ndvi_he"], "exportimages", 2020, r"D:\data\ref\field_selection\test_fields_sample\2019_250testfields.shp", r"C:\tmp")
+    """
     #
     #
     #
@@ -223,7 +246,7 @@ def export_shape(lstszproducts, lstszmethods, szyyyyyear, szshapefile, szoutputd
     #
     #    have pandas read the shapefile which is assumed to have fieldID
     #
-    parcelsgeodataframe = geopandas.read_file(szshapefile)
+    parcelsgeodataframe = geopandas.read_file(szshapefile, rows=2)
     parcelsgeodataframe.set_index( 'fieldID', inplace=True, verify_integrity=True) # throws KeyError if fieldID not available
     parcelsgeodataframe.to_crs(epsg=4326, inplace=True)
     numberofparcels = len(parcelsgeodataframe.index)
@@ -289,7 +312,10 @@ def export_shape(lstszproducts, lstszmethods, szyyyyyear, szshapefile, szoutputd
 
             datetime_tick = datetime.datetime.now()
             icountparcels += 1
-            if (icountparcels > 1): return # debug
+            #
+            #
+            #
+            #if (icountparcels > 1): return # debug
             #
             #
             #
@@ -325,6 +351,7 @@ def export_shape(lstszproducts, lstszmethods, szyyyyyear, szshapefile, szoutputd
         #
         logging.info(f"{os.path.basename(__file__)[0:-3]} run ({icountparcels} of {numberofparcels}) parcels - {int( (datetime.datetime.now()-datetime_tick_all).total_seconds()/6/6)/100} hours")
         logging.getLogger().removeHandler(logfilehandler)
+
 
 """
 """

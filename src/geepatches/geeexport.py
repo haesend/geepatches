@@ -7,6 +7,8 @@ import geeutils
 import os
 import time
 import math
+import logging
+
 
 
 """
@@ -266,7 +268,8 @@ class GEEExp(object):
                 if verbose: print(f"{str(type(self).__name__)}.exportimages - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize} success")
     
         except Exception as e:
-            print(f"{str(type(self).__name__)}.exportimagestacks - unhandled exception: {str(e)}")
+            if verbose: print(f"{str(type(self).__name__)}.exportimages - unhandled exception: {str(e)}")
+            logging.warning(f"{str(type(self).__name__)}.exportimages - unhandled exception: {str(e)}") 
             raise
     
         return True
@@ -388,7 +391,8 @@ class GEEExp(object):
                 if verbose: print(f"{str(type(self).__name__)}.exportimagestack - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize} success")
     
         except Exception as e:
-            print(f"{str(type(self).__name__)}.exportimagestack - unhandled exception: {str(e)}")
+            if verbose: print(f"{str(type(self).__name__)}.exportimagestack - unhandled exception: {str(e)}")
+            logging.warning(f"{str(type(self).__name__)}.exportimagestack - unhandled exception: {str(e)}") 
             raise
     
         return True        
@@ -509,7 +513,8 @@ class GEEExp(object):
                 if verbose: print(f"{str(type(self).__name__)}.exportimagestodrive - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize} success")
 
         except Exception as e:
-            print(f"{str(type(self).__name__)}.exportimagestodrive - unhandled exception: {str(e)}")
+            if verbose: print(f"{str(type(self).__name__)}.exportimagestodrive - unhandled exception: {str(e)}")
+            logging.warning(f"{str(type(self).__name__)}.exportimagestodrive - unhandled exception: {str(e)}") 
             raise
     
         return True
@@ -588,6 +593,7 @@ class GEEExp(object):
 
         except Exception as e:
             if verbose: print(f"{str(type(self).__name__)}.exportimagestacktodrive - unhandled exception: {str(e)}")
+            logging.warning(f"{str(type(self).__name__)}.exportimagestacktodrive - unhandled exception: {str(e)}") 
             raise
 
         return True

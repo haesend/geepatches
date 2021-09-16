@@ -645,6 +645,9 @@ def wrapretry(func, args=(), kwargs={}, *, attempts=3, backoffseconds=10, backof
     :param backoffseconds: backoff time before retry in seconds. Defaults to 10.
     :param backofffactor: increase backoff time for each attempt by multiplying previous value with backofffactor. Defaults to 1.
     :param verbose: print debug information if True. Defaults to False
+    
+    TODO: this could be painful for stupid errors which cannot recover anyway. perhaps we should implement some specific exception
+          class indicating the retries can be stopped (StopIteration ?), but then the client should be aware of being wrapped.
 
     """
     if False:
