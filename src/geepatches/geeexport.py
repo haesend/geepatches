@@ -525,6 +525,16 @@ class GEEExp(object):
     """
     def exportimagestacktodrive(self, eeimagecollection, szgdrivefolder, szfilenameprefix="", verbose=False):
         """
+        wrap _exportimages to allow some retries to avoid sporadic "ee.ee_exception.EEException: Computation timed out."
+        """
+        return geeutils.wrapretry(
+            self._exportimagestacktodrive, 
+            args=(eeimagecollection, szgdrivefolder),
+            kwargs={'szfilenameprefix':szfilenameprefix, 'verbose':verbose},
+            attempts=9, backoffseconds=60, backofffactor=2, verbose=verbose) # max 1 + 2 + ... + 128 = 255 minutes
+
+    def _exportimagestacktodrive(self, eeimagecollection, szgdrivefolder, szfilenameprefix="", verbose=False):
+        """
         """
         try:
             #
