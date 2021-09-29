@@ -59,7 +59,7 @@ def sanemethods(*szmethods):
 demonstrater: exporter
     hosting all export methods
     configurable for a list of products, 
-    specifies S2 20m (GEECol_s2scl()) as referenc collection
+    specifies S2 20m (GEECol_s2scl()) as reference collection
     eexporting 1280m (64 pix) diameter roi's
 """
 class GEEExporter():
@@ -76,7 +76,7 @@ class GEEExporter():
     #
     def _getgeecollections(self, eedatefrom, eedatetill, eepoint, verbose=False):
         """
-        generator yielding collections for specifed products
+        generator yielding collections for specified products
         """
         #
         #    using sentinel 2 20m as reference
