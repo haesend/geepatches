@@ -109,7 +109,8 @@ class GEEExporter():
         if "S1gamma0"          in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
         if "S1gamma0"          in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
         if "S1gamma0"          in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1rvi"             in self.szproducts: yield geeproduct.GEECol_s1rvi().getcollection(              eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1rvi"             in self.szproducts: yield geeproduct.GEECol_s1rvi('ASC').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1rvi"             in self.szproducts: yield geeproduct.GEECol_s1rvi('DES').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
          
         if "PV333ndvi"         in self.szproducts: yield geeproduct.GEECol_pv333ndvi().getcollection(          eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
         if "PV333ndvi_he"      in self.szproducts: yield geeproduct.GEECol_pv333ndvi_he().getcollection(       eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)

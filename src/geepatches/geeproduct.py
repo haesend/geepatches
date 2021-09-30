@@ -660,7 +660,7 @@ class GEECol_s1sigma0(GEECol, UserProjectable):
         #
         #    add collection properties describing this collection - S1, as always, being something special
         #       
-        eeimagecollection = eeimagecollection.set('gee_description', 'S1sigma0_' + self.szorbitpass[0:3] + '_' + self.szband)
+        eeimagecollection = eeimagecollection.set('gee_description', 'S1sigma0_' + self.szband + '_' + self.szorbitpass[0:3])
         #
         #
         #
@@ -731,7 +731,7 @@ class GEECol_s1gamma0(GEECol_s1sigma0):
         #
         #    add collection properties describing this collection - S1, as always, being something special
         #       
-        eeimagecollection = eeimagecollection.set('gee_description', 'S1gamma0_' + self.szorbitpass[0:3] + '_' + self.szband)
+        eeimagecollection = eeimagecollection.set('gee_description', 'S1gamma0_' + self.szband + '_' + self.szorbitpass[0:3])
         #
         #
         #
@@ -753,15 +753,23 @@ class GEECol_s1rvi(GEECol, OrdinalProjectable):
     experimental - just for the fun of it (to play with S1_GRD_FLOAT collection)
     """
 
+    def __init__(self, szorbitpass):
+        
+        if not szorbitpass in ['ASC', 'ASCENDING', 'DES', 'DESCENDING']:
+            raise ValueError("orbitpass must be specified as one of 'ASCENDING'(or 'ASC'), 'DESCENDING'(or 'DES')")
+        if szorbitpass == 'ASC': szorbitpass = 'ASCENDING'
+        if szorbitpass == 'DES': szorbitpass = 'DESCENDING'
+        self.szorbitpass = szorbitpass
+        
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
         #    base collection - using S1_GRD_FLOAT collection
-        #    TODO: limited to single orbit direction?
         #
         eeimagecollection = (ee.ImageCollection('COPERNICUS/S1_GRD_FLOAT')
                              .filter(ee.Filter.eq('instrumentSwath', 'IW'))
                              .filter(ee.Filter.listContains('system:band_names', 'VV'))
                              .filter(ee.Filter.listContains('system:band_names', 'VH'))
+                             .filter(ee.Filter.eq('orbitProperties_pass', self.szorbitpass))
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
         #
@@ -778,9 +786,9 @@ class GEECol_s1rvi(GEECol, OrdinalProjectable):
         #
         eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="max", verbose=verbose)        
         #
-        #    add collection properties describing this collection (TODO: limited to single orbit direction? -> modify description)
+        #    add collection properties describing this collection
         #       
-        eeimagecollection = eeimagecollection.set('gee_description', 'S1rvi')
+        eeimagecollection = eeimagecollection.set('gee_description', 'S1rvi_' + self.szorbitpass[0:3])
         #
         #
         #
