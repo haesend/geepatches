@@ -989,3 +989,29 @@ def outlinegeometryimage(eegeometry, distanceinmeters=0, width=1):
         width=eewidth)
 
 
+def maskoutsidegeometry(eegeometry, eeimage, distanceinmeters=0):
+    """
+    mask image outside geometry (same as clip?)
+
+    beware: using distanceinmeters is ment for visualization only; 
+            e.g. eegeometry.buffer(distanceinmeters) on a rectangle will round the corners of the original rectangle
+    """
+    if eeimage is None: eeimage = ee.Image(1)
+    if distanceinmeters is not None and 0 != distanceinmeters: eegeometry = eegeometry.buffer(distanceinmeters)
+    eefeature           = ee.Feature(eegeometry)
+    eefeaturecollection = ee.FeatureCollection(eefeature)
+    outsidemask         = ee.Image(0).paint(eefeaturecollection, 1, None)
+    return eeimage.updateMask(outsidemask)
+
+
+def maskinsidegeometry(eegeometry, eeimage, distanceinmeters=0):
+    """
+    mask image inside geometry
+    """
+    if eeimage is None: eeimage = ee.Image(1)
+    if distanceinmeters is not None and 0 != distanceinmeters: eegeometry = eegeometry.buffer(distanceinmeters)
+    eefeature           = ee.Feature(eegeometry)
+    eefeaturecollection = ee.FeatureCollection(eefeature)
+    insidemask          = ee.Image(1).paint(eefeaturecollection, 0, None)
+    return eeimage.updateMask(insidemask)
+
