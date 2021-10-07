@@ -617,6 +617,169 @@ class GEECol_s2rgb(GEECol, OrdinalProjectable):
                                                                  .toUint8()))
         return eeimagecollection
 
+"""
+"""
+class GEECol_s2cloudlessmask(GEECol, CategoricalProjectable):
+    """
+    copy of the gee tutorial "Sentinel-2 Cloud Masking with s2cloudless"
+
+    https://developers.google.com/earth-engine/tutorials/community/sentinel-2-s2cloudless
+    https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S2_CLOUD_PROBABILITY#description
+    
+    issues:
+    - s2cloudless probability has problems at edges 
+        - e.g. geeutils.half31UESpoint on geeutils.half31UESday
+          - data beyond image data (at edge)
+          - and this data does not seem correct
+    - resulting (mask) image extends beyond edges too 
+        - hence the updateMask with SCL mask, at least it is consistent with GEECol_s2sclconvmask
+    - suggested parameters need tuning. 
+        - e.g. CLD_PRJ_DIST on 1 km is too little for half31UESpoint on geeutils.half31UESday; shadows are ignored.
+        
+    """
+    def __init__(self):
+        """
+        configuration parameters:
+        CLOUD_FILTER    (60)   integer    Maximum image cloud cover percent allowed in image collection
+        CLD_PRB_THRESH  (50)   integer    Cloud probability (%); values greater than are considered cloud
+        NIR_DRK_THRESH  (0.15) float      Near-infrared reflectance; values less than are considered potential cloud shadow
+        CLD_PRJ_DIST    (1)    float      Maximum distance (km) to search for cloud shadows from cloud edges
+        BUFFER          (50)   integer    Distance (m) to dilate the edge of cloud-identified objects
+        """
+        self.CLOUD_FILTER   = 100   #60
+        self.CLD_PRB_THRESH = 40    #50
+        self.NIR_DRK_THRESH = 0.15
+        self.CLD_PRJ_DIST   = 5     #1
+        self.BUFFER         = 100   #50
+    
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        #
+        # Import and filter S2 SR.
+        #
+        s2_sr_col = (ee.ImageCollection('COPERNICUS/S2_SR')
+                     .filterBounds(eeroi)
+                     .filterDate(eedatefrom, eedatetill)
+                     .filter(ee.Filter.lte('CLOUDY_PIXEL_PERCENTAGE', self.CLOUD_FILTER)))
+        #
+        # Import and filter s2cloudless.
+        #
+        s2_cloudless_col = (ee.ImageCollection('COPERNICUS/S2_CLOUD_PROBABILITY')
+                            .filterBounds(eeroi)
+                            .filterDate(eedatefrom, eedatetill))
+        #
+        # Join the filtered s2cloudless collection to the SR collection by the 'system:index' property.
+        #
+        eeimagecollection = ee.ImageCollection(ee.Join.saveFirst('s2cloudless').apply(**{
+            'primary': s2_sr_col,
+            'secondary': s2_cloudless_col,
+            'condition': ee.Filter.equals(**{
+                'leftField': 'system:index', 'rightField': 'system:index'})}))
+
+        #
+        # Define a function to add the s2cloudless probability layer and derived cloud mask as bands to an S2 SR image input.
+        #
+        def add_cloud_bands(img):
+            # Get s2cloudless image, subset the probability band.
+            cld_prb = ee.Image(img.get('s2cloudless')).select('probability')
+        
+            # Condition s2cloudless by the probability threshold value.
+            is_cloud = cld_prb.gt(self.CLD_PRB_THRESH).rename('clouds')
+        
+            # Add the cloud probability layer and cloud mask as image bands.
+            return img.addBands(ee.Image([cld_prb, is_cloud]))
+
+        # 
+        # Define a function to add dark pixels, cloud projection, and identified shadows as bands to an S2 SR image input. 
+        # Note that the image input needs to be the result of the above add_cloud_bands function 
+        # because it relies on knowing which pixels are considered cloudy ('clouds' band).
+        # 
+        def add_shadow_bands(img):
+            # Identify water pixels from the SCL band.
+            not_water = img.select('SCL').neq(6)
+        
+            # Identify dark NIR pixels that are not water (potential cloud shadow pixels).
+            SR_BAND_SCALE = 1e4
+            dark_pixels = img.select('B8').lt(self.NIR_DRK_THRESH*SR_BAND_SCALE).multiply(not_water).rename('dark_pixels')
+        
+            # Determine the direction to project cloud shadow from clouds (assumes UTM projection).
+            shadow_azimuth = ee.Number(90).subtract(ee.Number(img.get('MEAN_SOLAR_AZIMUTH_ANGLE')));
+        
+            # Project shadows from clouds for the distance specified by the CLD_PRJ_DIST input.
+            cld_proj = (img.select('clouds').directionalDistanceTransform(shadow_azimuth, self.CLD_PRJ_DIST*10)
+                .reproject(**{'crs': img.select(0).projection(), 'scale': 100})
+                .select('distance')
+                .mask()
+                .rename('cloud_transform'))
+        
+            # Identify the intersection of dark pixels with cloud shadow projection.
+            shadows = cld_proj.multiply(dark_pixels).rename('shadows')
+        
+            # Add dark pixels, cloud projection, and identified shadows as image bands.
+            return img.addBands(ee.Image([dark_pixels, cld_proj, shadows]))              
+
+        #
+        # Define a function to assemble all of the cloud and cloud shadow components and produce the final mask.
+        #
+        def add_cld_shdw_mask(img):
+            # Add cloud component bands.
+            img_cloud = add_cloud_bands(img)
+        
+            # Add cloud shadow component bands.
+            img_cloud_shadow = add_shadow_bands(img_cloud)
+        
+            # Combine cloud and shadow mask, set cloud and shadow as value 1, else 0.
+            is_cld_shdw = img_cloud_shadow.select('clouds').add(img_cloud_shadow.select('shadows')).gt(0)
+        
+            # Remove small cloud-shadow patches and dilate remaining pixels by BUFFER input.
+            # 20 m scale is for speed, and assumes clouds don't require 10 m precision.
+            is_cld_shdw = (is_cld_shdw.focal_min(2).focal_max(self.BUFFER*2/20)
+                .reproject(**{'crs': img.select([0]).projection(), 'scale': 20})
+                .rename('cloudmask'))
+        
+            # Add the final cloud-shadow mask to the image.
+            return img_cloud_shadow.addBands(is_cld_shdw)
+ 
+        #       
+        #    base collection - extend with calculated bands => now the thing has 29 bands ( print(geeutils.szbandsinfo(eeimagecollection.first())) )
+        #
+        eeimagecollection = eeimagecollection.map(add_cld_shdw_mask)
+        #
+        #    but normally we want only the resulting 'cloudmask'
+        #
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .select('cloudmask')
+                                                                 .updateMask(image.select('SCL').mask())))
+        #
+        #
+        #
+        #
+        #    apply mode composite in case of overlapping images on same day
+        #
+        eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="max", verbose=verbose)
+        #
+        #    add collection properties describing this collection (in this case: overwrites 'gee_description' from GEECol_s2scl)
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'S2cloudlessmask')
+        #
+        #
+        #
+        return eeimagecollection
+
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        'S2 half tiles' (e.g. 31UES on '2020-01-29') have limited their footprint to the area 
+        where data lives, thus *NOT* the full 31UES footprint
+        when exporting masks [0,1] for these images, we'll indicate the unknown area with 255 as no data
+        
+          0: not masked (clear sky)
+          1: masked     (belgian sky)
+        255: no data    (belgian politics)
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .unmask(255, False)    # no data to 255
+                                                                 .toUint8()))           # actually obsolete here
+        return eeimagecollection
+
 
 """
 """

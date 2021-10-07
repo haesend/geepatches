@@ -19,7 +19,7 @@ IAMRUNNINGONTHEMEP = False
 #
 #    available products
 #
-EXPORTABLEPRODUCTS = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2scl", "S2sclconvmask", "S2tcirgb",
+EXPORTABLEPRODUCTS = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2scl", "S2sclconvmask", "S2tcirgb", "S2cloudlessmask",
                       "S1sigma0", "S1gamma0", "S1rvi",
                       "PV333ndvi", "PV333ndvi_he", "PV333sm", "PV333smsimplemask", "PV333rgb"]
 #
@@ -82,7 +82,7 @@ class GEEExporter():
         #    using sentinel 2 20m as reference
         #
         refcol    = geeproduct.GEECol_s2scl()
-        refcolpix = 64
+        refcolpix = 128 #64
         #
         #    heuristics for other products
         #
@@ -100,6 +100,7 @@ class GEEExporter():
         if "S2scl"             in self.szproducts: yield geeproduct.GEECol_s2scl().getcollection(              eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
         if "S2sclconvmask"     in self.szproducts: yield geeproduct.GEECol_s2sclconvmask().getcollection(      eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
         if "S2tcirgb"          in self.szproducts: yield geeproduct.GEECol_s2rgb().getcollection(              eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2cloudlessmask"   in self.szproducts: yield geeproduct.GEECol_s2cloudlessmask().getcollection(    eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
  
         if "S1sigma0"          in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
         if "S1sigma0"          in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
@@ -360,17 +361,27 @@ def demo_export_point():
     #
     #
     #
-    testproducts = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2scl", "S2sclconvmask", "S2tcirgb",
+    testproducts = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2scl", "S2sclconvmask", "S2tcirgb", "S2cloudlessmask",
                     "S1sigma0", "S1gamma0", "S1rvi",
                     "PV333ndvi", "PV333ndvi_he", "PV333sm", "PV333smsimplemask", "PV333rgb"]
 
     testmethods  = ["exportimages", "exportimagestack", "exportimagestacktodrive"]
 
-    szdatefrom   = '2020-01-29'
-    szdatetill   = '2020-02-05'
+    # #half31UESday    = ee.Date('2020-01-29')
+    # szdatefrom   = '2020-01-29'
+    # szdatetill   = '2020-02-05'
+    #
+    # #half31UESpoint  = ee.Geometry.Point(3.56472, 50.83872) 
+    # pointlon     = 3.56472
+    # pointlat     = 50.83872
 
-    pointlon     = 3.56472
-    pointlat     = 50.83872
+    #fleecycloudsday = ee.Date('2018-07-12')
+    szdatefrom   = '2018-07-12'
+    szdatetill   = '2018-07-13'
+
+    #bobspoint       = ee.Geometry.Point(4.90782, 51.20069)
+    pointlon     = 4.90782
+    pointlat     = 51.20069
     
     szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
 
