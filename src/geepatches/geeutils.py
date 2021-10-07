@@ -197,36 +197,41 @@ def maskimageinsidegeometry(eeimage, eegeometry):
     return eeimage.updateMask(((ee.Image(1).paint(ee.FeatureCollection(ee.Feature(eegeometry)), color=25)).eq(25)).Not())
 
 
-def pixelcenterpoint(eepoint, eerefimage):
+def pixelcenterpoint(eepoint, eerefimage, verbose=False):
     """
     center point of the pixel in the reference image close to the eepoint
 
     BEWARE: eerefimage must have one single band, or all bands must have identical projections.
     """
+    if verbose: print(f"{pathlib.Path(__file__).stem}:pixelcenterpoint  eepoint: {szgeometryinfo(eepoint)} \n\t eerefimage: {szprojectioninfo(eerefimage)}")
     #
-    #   center of the sampled pixel in the image
-    #   result in 'crs':'EPSG:4326', 'transform': [1, 0, 0, 0, 1, 0], 'nominalScale': 111319.49079327357
+    #    center of the sampled pixel in the image
+    #    result in 'crs':'EPSG:4326', 'transform': [1, 0, 0, 0, 1, 0], 'nominalScale': 111319.49079327357
     #
-    centerpoint = eerefimage.sample(region = eepoint, geometries = True).geometry()
+    #    BEWARE: 'unmask' before 'sample': 'masked' pixels are not considered and give an empty geometry. nice.
     #
-    #   transform back to its own projection
+    #
+    centerpoint = eerefimage.unmask().sample(region = eepoint, geometries = True).geometry()
+    #
+    #    transform back to its own projection
     #
     centerpoint = centerpoint.transform(eerefimage.projection())
     #
-    #   in this projection, the coordinates should end *exactly* on .5
+    #    in this projection, the coordinates should end *exactly* on .5
     #
     centerpointcoordinateslist = centerpoint.coordinates().map(lambda coord: ee.Number(coord).multiply(2).round().divide(2))
     #
-    #   assemble the *exact* centerpoint
+    #    assemble the *exact* centerpoint
     #
     centerpoint = ee.Geometry.Point(centerpointcoordinateslist, proj=eerefimage.projection())
+    if verbose: print(f"{pathlib.Path(__file__).stem}:pixelcenterpoint out {szgeometryinfo(centerpoint)}")
     #
     #
     #
     return centerpoint
 
 
-def pixelinterspoint(eepoint, eerefimage):
+def pixelinterspoint(eepoint, eerefimage, verbose=False):
     """
     intersection of pixels (raster) in the reference image close to the eepoint
     remark:
@@ -235,8 +240,11 @@ def pixelinterspoint(eepoint, eerefimage):
         the "odd" intersections in the original scale. hence the "even" intersections will never be used.
     BEWARE: eerefimage must have one single band, or all bands must have identical projections.
     """
-    return (pixelcenterpoint(eepoint, eerefimage.reproject(eerefimage.projection().scale(2, 2)))
-            .transform(eerefimage.projection()))
+    if verbose: print(f"{pathlib.Path(__file__).stem}:pixelinterspoint  eepoint: {szgeometryinfo(eepoint)} \n\t eerefimage: {szprojectioninfo(eerefimage)}")
+    interspoint = (pixelcenterpoint(eepoint, eerefimage.reproject(eerefimage.projection().scale(2, 2)), verbose=verbose)
+                   .transform(eerefimage.projection()))
+    if verbose: print(f"{pathlib.Path(__file__).stem}:pixelinterspoint out: {szgeometryinfo(interspoint)}")
+    return interspoint
 
 
 def squareareaboundsroi(eepoint, metersradius, eeprojection=None, verbose=False):
@@ -366,7 +374,8 @@ def squarerasterboundsroi(eepoint, pixelsradius, eeprojection, verbose=False):
 def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
     """
     mosaic images of same date (day).
-        composite type can be specified as one of 'mean', 'max', 'min', 'mode', 'median' or 'mosaic' (default) 
+        composite type can be specified as one of 'mean', 'max', 'min', 'mode', 'median', 'first' (testpurposes) or 'mosaic' (default) 
+        images are labeled with their (daily) date. per unique day, the images are mosaiced/composited with the specified method.
 
     ee.ImageCollection.mosaic():
         Composites all the images in a collection, using the mask.
@@ -377,10 +386,13 @@ def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
         e.g. case where a geometry intersects multiple sentinel 2 tiles. crude.
 
     ee.ImageCollection.mode():
-        Reduces an image collection by calculating the most common value at each pixel across the stack of all matching bands. Bands are matched by name.
+        Reduces an image by calculating the most common value at each pixel across the stack of all matching bands. Bands are matched by name.
 
     ee.ImageCollection.mean/median/max/min():
-        Reduces an image collection by calculating the mean/median/max/min of all values at each pixel across the stack of all matching bands.
+        Reduces an image by calculating the mean/median/max/min of all values at each pixel across the stack of all matching bands.
+
+    ee.ImageCollection.first():
+        Reduces an image by selecting the first of the collection. (mainly test purposes).
 
     BEWARE: (TODO: check if)
         result is unbounded (print(image.geometry().getInfo()) gives [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]])
@@ -391,6 +403,7 @@ def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
     def _mosaicdaily_method_min(eeimagecollection):    return eeimagecollection.min()
     def _mosaicdaily_method_mode(eeimagecollection):   return eeimagecollection.mode()
     def _mosaicdaily_method_median(eeimagecollection): return eeimagecollection.median()
+    def _mosaicdaily_method_first(eeimagecollection):  return eeimagecollection.first()
     #
     #
     #
@@ -402,8 +415,9 @@ def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
     elif szmethod == "min":    _method=_mosaicdaily_method_min
     elif szmethod == "mode":   _method=_mosaicdaily_method_mode
     elif szmethod == "median": _method=_mosaicdaily_method_median
+    elif szmethod == "first":  _method=_mosaicdaily_method_first
     else: 
-        raise ValueError("szmethod must be specified as one of 'mosaic', 'mean', 'max', 'min', 'mode', 'median")
+        raise ValueError("szmethod must be specified as one of 'mosaic', 'mean', 'max', 'min', 'mode', 'median' or 'first'")
 
     #
     #
