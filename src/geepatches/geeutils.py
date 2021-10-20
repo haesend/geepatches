@@ -924,14 +924,14 @@ def szestimatevaluesinfo(eeimagecollection, verbose=True):
     sz += szimagecollectioninfo(eeimagecollection, verbose=False)
     sz += "\n"
     for iIdx, bandname in enumerate(eeimagecollection.first().bandNames().getInfo()):
-        xin = minpixelvalue.get(str(bandname)+'_min').getInfo()   # reduceRegion(ee.Reducer.min()) giving "None" for constant images? (hence for all small regions)
-        xax = maxpixelvalue.get(str(bandname)+'_max').getInfo()   # min and max are 'reserved built-in symbol'
+        xin = minpixelvalue.get(str(bandname)+'_min').getInfo()               # min and max are 'reserved built-in symbol'
+        xax = maxpixelvalue.get(str(bandname)+'_max').getInfo()
         avg = meapixelvalue.get(str(bandname)+'_mean').getInfo()
         med = medpixelvalue.get(str(bandname)+'_median').getInfo()
-        szmin = f"{xin:15f}" if xin else f"{'none':15s}"          # Why do we bother, Fawlty?
-        szmax = f"{xax:15f}" if xax else f"{'none':15s}"
-        szavg = f"{avg:15f}" if avg else f"{'none':15s}"
-        szmed = f"{med:15f}" if med else f"{'none':15s}"
+        szmin = f"{xin:15f}" if xin is not None else f"{'none':15s}"          # Why do we bother, Fawlty?
+        szmax = f"{xax:15f}" if xax is not None else f"{'none':15s}"
+        szavg = f"{avg:15f}" if avg is not None else f"{'none':15s}"
+        szmed = f"{med:15f}" if med is not None else f"{'none':15s}"
         sz += f"band({iIdx:3d}) "
         sz += f"{bandname:{lenmaxszbandname}s}: "
         sz += f" min: {szmin} "
