@@ -51,7 +51,9 @@ class UserProjectable(IProjectable):
 class CategoricalProjectable(IProjectable):
     def _reproject(self, eeimagecollection, eeprojection, verbose=False):
         """
-        reproject categorical collection - using mode
+        reproject categorical collection 
+        - using mode because that is what we want
+        - unweighted to avoid 'float' values due to fractional pixel selections
         
         remark: 
         - in case a categorical image is down sampled considerably, mode is a far better method than nearest neighbor
@@ -61,7 +63,7 @@ class CategoricalProjectable(IProjectable):
         if verbose: print(f"{str(type(self).__name__)}._reproject - using Reducer.mode() - {geeutils.szprojectioninfo(eeprojection)}")
         def reproject(image):
             return (image
-                    .reduceResolution(ee.Reducer.mode(), maxPixels=4096)
+                    .reduceResolution(ee.Reducer.mode().unweighted(), maxPixels=4096)
                     .reproject(eeprojection))
          
         eeimagecollection = eeimagecollection.map(reproject)
