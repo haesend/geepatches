@@ -1,12 +1,13 @@
 import os
 import logging
+import datetime
+import random
 
 import geopandas
-import datetime
 
 import ee
-if not ee.data._credentials: ee.Initialize()
 
+import geeutils
 import geeproduct
 import geeexport
 
@@ -66,11 +67,12 @@ class GEEExporter():
     #
     #
     #
-    def __init__(self, *szproducts):
+    def __init__(self, *szproducts, pulse=None):
         """
         e.g. exporter = GEEExporter("S2ndvi", "S1sigma0")
         """
         self.szproducts = saneproducts(*szproducts)
+        self.pulse      = pulse
     #
     #
     #
@@ -125,18 +127,22 @@ class GEEExporter():
     def exportimages(self, eepoint, eedatefrom, eedatetill, szoutputdir, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
             geeexport.GEEExp().exportimages(geecollection, szoutputdir, szfilenameprefix=szfilenameprefix, verbose=verbose)
+            if self.pulse: self.pulse.pulse()
  
     def exportimagestack(self, eepoint, eedatefrom, eedatetill, szoutputdir, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
             geeexport.GEEExp().exportimagestack(geecollection, szoutputdir, szfilenameprefix=szfilenameprefix, verbose=verbose)
+            if self.pulse: self.pulse.pulse()
  
     def exportimagestodrive(self, eepoint, eedatefrom, eedatetill, szgdrivefolder, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
             geeexport.GEEExp().exportimagestodrive(geecollection, szgdrivefolder, szfilenameprefix=szfilenameprefix, verbose=verbose)
+            if self.pulse: self.pulse.pulse()
          
     def exportimagestacktodrive(self, eepoint, eedatefrom, eedatetill, szgdrivefolder, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
             geeexport.GEEExp().exportimagestacktodrive(geecollection, szgdrivefolder, szfilenameprefix=szfilenameprefix, verbose=verbose)
+            if self.pulse: self.pulse.pulse()
 
 
 """
@@ -146,6 +152,7 @@ def export_point(lstszproducts, lstszmethods, szdatefrom, szdatetill, pointlon, 
     """
     e.g.: export_point(["S2ndvi", "S1sigma0"], "exportimages", "2019-01-01", "2020-01-01", 4.90782, 51.20069, r"C:\tmp")
     """
+    if not ee.data._credentials: ee.Initialize()
     #
     #
     #
@@ -236,6 +243,7 @@ def export_shape(lstszproducts, lstszmethods, szyyyyyear, szshapefile, szoutputd
     """
     e.g.: export_shape(["S2ndvi_he"], "exportimages", 2020, r"D:\data\ref\field_selection\test_fields_sample\2019_250testfields.shp", r"C:\tmp")
     """
+    if not ee.data._credentials: ee.Initialize()
     #
     #
     #
@@ -355,6 +363,145 @@ def export_shape(lstszproducts, lstszmethods, szyyyyyear, szshapefile, szoutputd
         logging.getLogger().removeHandler(logfilehandler)
 
 
+
+"""
+demonstrator - including logging & furniture: export random points - only exportimages method supported
+"""
+def export_random_points(lstszproducts, szyyyyyear, szoutputdir, pulse=None, verbose=False):
+    """
+    e.g.: TODO export_shape(["S2ndvi_he"], "exportimages", 2020, r"D:\data\ref\field_selection\test_fields_sample\2019_250testfields.shp", r"C:\tmp")
+    """
+    #
+    #
+    #
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname).3s {%(module)s:%(funcName)s:%(lineno)d} - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    #
+    #
+    #
+    if not ee.data._credentials: ee.Initialize()
+    #
+    #    check output directory on system - at least log files will live here - e.g: C:\tmp\
+    #
+    if not os.path.isdir(szoutputdir) : raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")  # root must exist
+    szoutputdir = os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3]}_points")              # append this scripts filename + _points
+    if not os.path.isdir(szoutputdir) : 
+        os.mkdir(szoutputdir)
+        if not os.path.isdir(szoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
+        os.chmod(szoutputdir, 0o777)
+    #
+    #    check products and methods
+    #
+    szyyyymmddfrom = str(int(szyyyyyear)    )  + "-01-01"  # assume per calendar year
+    szyyyymmddtill = str(int(szyyyyyear) + 1)  + "-01-01"
+    lstszproducts  = saneproducts(lstszproducts)
+    exporter       = GEEExporter(*lstszproducts, pulse=pulse)
+    eedatefrom     = ee.Date(szyyyymmddfrom)
+    eedatetill     = ee.Date(szyyyymmddtill)
+    szyyyymmddfrom = eedatefrom.format('YYYYMMdd').getInfo()
+    szyyyymmddtill = eedatetill.format('YYYYMMdd').getInfo()
+
+    #
+    #    logging to file - e.g: C:\tmp\geebatch_points\geebatch_points_19990101_20000101.log 
+    #
+    szoutputbasename=os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3] + '_points_' + szyyyymmddfrom + '_' + szyyyymmddtill}")
+    logfilehandler = logging.FileHandler(szoutputbasename + ".log")
+    logfilehandler.setFormatter(logging.Formatter('%(asctime)s %(levelname).4s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+    logging.getLogger().addHandler(logfilehandler) # (don't forget to remove it!)
+    datetime_tick_all  = datetime.datetime.now()
+    try:
+        #
+        #    initial log
+        #
+        logging.info(" ")
+        logging.info(f"{os.path.basename(__file__)[0:-3]}")
+        logging.info(f"    products:  {lstszproducts}")
+        logging.info(f"    from: {szyyyymmddfrom} till: {szyyyymmddtill}")
+        logging.info(f"    output dir: {szoutputdir}")
+        logging.info(" ")
+        #
+        # using discrete_classification band of most recent landcover image
+        #
+        eeclassification = (ee.ImageCollection('COPERNICUS/Landcover/100m/Proba-V-C3/Global')
+                           .sort('system:time_start', False)  # reverse sort
+                           .first()                           # most recent
+                           .select('discrete_classification') # Land cover classification 0..200
+                           .unmask(0, sameFootprint=False))   # 0 = Unknown; in gee used as mask
+        
+        #
+        # assume we skip regions with mainly
+        #     0 (Unknown. No or not enough satellite data available.)
+        #    70 (Snow and ice. Lands under snow or ice cover throughout the year.)
+        #    80 (Permanent water bodies. Lakes, reservoirs, and rivers. Can be either fresh or salt-water bodies.)
+        #   200 (Oceans, seas. Can be either fresh or salt-water bodies.)
+        #
+        lstskiplanduseclasses = [0, 70, 80, 200]
+        #
+        #
+        #
+        cPatch = 0
+        iPatch = 0
+        while True:
+            #
+            # assume global samples
+            #
+            longitude = (1 - random.random())*360. - 180.
+            latitude  = random.uniform(-80,80)
+            eepoint   = ee.Geometry.Point(longitude, latitude)
+            #
+            # assume landuse determined by about 1km x 1 km environment
+            #
+            landuseclass = eeclassification.reduceRegion(
+                ee.Reducer.mode().unweighted(), eepoint.buffer(500, maxError=0.001)).values().get(0).getInfo()
+            #
+            # skip specified land use classes
+            #
+            if landuseclass in lstskiplanduseclasses:
+                print(f"({iPatch:5d}) - skipping patch at ({longitude:013.8f}, {latitude:013.8f}): class({landuseclass:3d}) ")
+                continue
+
+            cPatch += 1
+            print(f"({iPatch:5d}) - patch at ({longitude:013.8f}, {latitude:013.8f}): class({landuseclass:3d}) patches:{cPatch:5d}")
+            
+            #
+            #    specific output directory per land use e.g: C:\tmp\geebatch_points\PV100LC_80
+            #
+            szfieldoutputdir = os.path.join(szoutputdir, f"PV100LC_{landuseclass}")
+            if not os.path.isdir(szfieldoutputdir) : 
+                os.mkdir(szfieldoutputdir)
+                if not os.path.isdir(szfieldoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szfieldoutputdir)})")
+                os.chmod(szfieldoutputdir, 0o777)
+ 
+            #
+            #    specific output directory per field e.g: C:\tmp\geebatch\PV100LC_80\Lon0003.56472000_Lat0050.83872000
+            #
+            szpointlon     = f"{eepoint.coordinates().get(0).getInfo():013.8f}"
+            szpointlat     = f"{eepoint.coordinates().get(1).getInfo():013.8f}"
+            szid           = f"Lon{szpointlon}_Lat{szpointlat}"
+
+            szfieldoutputdir = os.path.join(szfieldoutputdir, szid)
+            if not os.path.isdir(szfieldoutputdir) : 
+                os.mkdir(szfieldoutputdir)
+                if not os.path.isdir(szfieldoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szfieldoutputdir)})")
+                os.chmod(szfieldoutputdir, 0o777)
+            #
+            #
+            #
+            logging.info(f"    point: (lon {szpointlon} lat {szpointlat} )")
+            #
+            #
+            #
+            exporter.exportimages(eepoint, eedatefrom, eedatetill, szfieldoutputdir, verbose=verbose)
+        
+        #
+        #
+        #
+    finally:
+        #
+        #    remove handler we added at function start
+        #
+        logging.info(f"{os.path.basename(__file__)[0:-3]} exit - {int( (datetime.datetime.now()-datetime_tick_all).total_seconds()/6/6)/100} hours")
+        logging.getLogger().removeHandler(logfilehandler)
+
 """
 """
 def demo_export_point():
@@ -426,10 +573,33 @@ def demo_export_shape():
             for szmethod in testmethods:
                 export_shape(szproduct, szmethod, szyyyyyear, szshapefile, szoutrootdir, szgdrivedir, verbose=verbose)
 
+
+"""
+"""
+def demo_export_random_points():
+    #
+    #
+    #
+    testproducts = ["S2ndvi", "S2fapar", "S2sclconvmask",  "S1sigma0"]
+    testproducts = ["S2ndvi", "S2scl"]
+    szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
+    szyyyyyear   = 2019    
+    verbose      = False    
+    #
+    #
+    #
+    pulse = geeutils.Pulse()
+    geeutils.wrapasprocess(
+        export_random_points, 
+        args=(testproducts, szyyyyyear, szoutrootdir), 
+        kwargs={'pulse':pulse, 'verbose':verbose}, 
+        timeout=3*60*60, attempts=None, pulse=pulse) # exportimages and getcollection both have a wrapretry with 127 minutes backoff total
+
 """
 """
 def main():
-    demo_export_point()
+    demo_export_random_points()
+    #demo_export_point()
     #demo_export_shape()
     
 """

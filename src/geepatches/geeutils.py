@@ -566,19 +566,52 @@ def someImageNear(eeimagecollection, date, eepoint=None, verbose=False):
     return eeimage
 
 
-def wrapasprocess(func, args=(), kwargs={}, *, timeout=5, attempts=1, verbose=False):
+class Pulse(object):
+    """
+    simple shared variable object used to monitor long-running processes.
+    - child process indicates it is alive by .pulse()
+    - monitoring process can verify (and reset) this by .check()
+    
+    eg. 
+        def endless(pulse):
+            while True:
+                do_some_work
+                pulse.pulse()
+        mypulse = Pulse()
+        wrapasprocess(endless, args=(mypulse,), pulse=mypulse)
+        
+    """
+    def __init__(self, verbose=True):
+        self._verbose = verbose
+        self._pulse   = multiprocessing.Value('i', 1)
+        if self._verbose: print(f"{str(type(self).__name__)}")
+
+    def pulse(self):
+        self._pulse.value = 1
+        if self._verbose: print(f"{str(type(self).__name__)}.pulse()")
+
+    def check(self):
+        value = self._pulse.value
+        if self._verbose: print(f"{str(type(self).__name__)}.check({(value==True)})")
+        if not value: return False
+        self._pulse.value = 0
+        return True
+
+
+def wrapasprocess(func, args=(), kwargs={}, *, timeout=5, attempts=1, pulse=None, verbose=True):
     """
     execute a function in a child process, guard it with a timout and allow for retries.
     the return value of the function (if any) itself is ignored, only the exitcode is evaluated and interpreted as
     == 0: no error, < 0: killed via some signal, > 0: some error  (Processes that raise an exception get an exitcode of 1).
-    aim is not start multiple processes, but just to have some control over the launching of ee.Task-s, accounting for 
-    gee downtime, hanging gee calls, overflowing gee task queue-s,... and own kemels.
+    aim is not start multiple processes, but just to have some control over the launching of server tasks, accounting for 
+    server downtime, hanging calls, overflowing task queue-s,... and own kemels.
     
     :param func: the target function to be wrapped - this function should use exit(returncode) retrurncode = 0:success, other: fail
     :param args: the argument tuple for the target invocation. Defaults to ()
     :param kwargs: a dictionary of keyword arguments for the target invocation. Defaults to {}
     :param timeout: timeout in seconds. Defaults to 5.
     :param attempts: maximum number of retries. Specify None for endless. Defaults to 1
+    :param pulse: Pulse object shared with target function to indicate its sanity. Defaults to None
     :param verbose: print debug information if True. Defaults to False
     
     :return: True in case the target has exited, with return code 0, within the specified number of attempts, within the specified time. False otherwise.
@@ -599,32 +632,63 @@ def wrapasprocess(func, args=(), kwargs={}, *, timeout=5, attempts=1, verbose=Fa
         print(f"wrapasprocess:    func: {func}")
         for iIdx, arg in enumerate(args): print(f"        args {iIdx}: {str(arg)}")
         for key, value in kwargs.items(): print(f"        kwargs key {str(key)}: {str(value)}")
-        print(f"        timeout : {timeout}")
-        print(f"        attempts: {attempts}")
+        print(f"        timeout : {timeout} seconds")
+        print(f"        attempts: {attempts if attempts is not None else 'endless'}")
+        print(f"        pulse   : {'specified' if pulse else 'None'}")
         print(f"        verbose : {verbose}")
 
-    attempt = 1
+    attempt   = 1
+    continues = 0
     while True:
-        if verbose: print(f"wrapasprocess: attempt {attempt} starts")
+        if verbose: print(f"wrapasprocess: attempt {attempt} of {attempts if attempts is not None else 'endless'} {'starts' if continues==0 else ('continued (' + str(continues) + ' time(s))')} ")
         try:
             datetime_tick  = datetime.datetime.now()
-            process = multiprocessing.Process(target=func, args=args, kwargs=kwargs)
-            process.start()
+            if continues == 0:
+                process = multiprocessing.Process(target=func, args=args, kwargs=kwargs)
+                process.start()
+            #
+            # wait for it
+            #
             process.join(timeout)
+            #
+            # evaluate what is happening
+            #
             if not process.is_alive():
+                #
                 # in time and not alive. most probably all went well, but might have been an exception
+                #
                 print(f"wrapasprocess: attempt {attempt} exitcode: {process.exitcode}")
                 if 0 == process.exitcode:
+                    #
                     # assuming success - exit
+                    #
                     if verbose: print(f"wrapasprocess: attempt {attempt} SUCCESS with exitcode {process.exitcode} - in time, after {int((datetime.datetime.now()-datetime_tick).total_seconds())} seconds")
                     return True # exit from endless (with 'True' - success)
                 else:
+                    #
                     # assume crash (we'll retry)
+                    #
                     if verbose: print(f"wrapasprocess: attempt {attempt} FAILED with exitcode {process.exitcode} - in time, after {int((datetime.datetime.now()-datetime_tick).total_seconds())} seconds")
                     pass # check retry
             else:
-                # still alive. must have timed out. return code expected to be 'None', but we'll ignore it anyway
-                if verbose: print(f"wrapasprocess: attempt {attempt} FAILED - TIMED OUT after {int((datetime.datetime.now()-datetime_tick).total_seconds())} seconds")
+                #
+                # still alive. might have timed out. return code expected to be 'None', but we'll ignore it anyway
+                #
+                if verbose: print(f"wrapasprocess: attempt {attempt} {'CHECKING' if pulse else 'FAILED - TIMED OUT'} after {int((datetime.datetime.now()-datetime_tick).total_seconds())} seconds")
+                #
+                # in case a pulse was specified, we might continue without restart
+                #
+                if pulse:
+                    if pulse.check():
+                        if verbose: print(f"wrapasprocess: attempt {attempt} STILL PULSING - continue")
+                        continues += 1
+                        continue
+                    else:
+                        if verbose: print(f"wrapasprocess: attempt {attempt} NO PULSE DETECTED")
+                        pass # kill and check retry
+                #
+                # 
+                #
                 process.kill() # yes, terminate should do. probably. in most cases. whatever.
                 process.join()
                 pass # check retry
@@ -635,17 +699,18 @@ def wrapasprocess(func, args=(), kwargs={}, *, timeout=5, attempts=1, verbose=Fa
             pass # check retry
         
         # check retry
-        attempt += 1
+        attempt  += 1
         if (attempts is not None) and (attempts < attempt):
             if verbose: print(f"wrapasprocess: attempt {attempt-1} FAILED - exits")
             return False # exit from endless (with 'False' - failed)
         # do retry
-        if verbose: print(f"wrapasprocess: attempt {attempt-1} FAILED - retry") 
+        if verbose: print(f"wrapasprocess: attempt {attempt-1} FAILED - retry")
+        continues = 0
 
 
 def wrapretry(func, args=(), kwargs={}, *, attempts=3, backoffseconds=10, backofffactor=1, verbose=False):
     """
-    execute a function and allow for retries.
+    execute a function and allow for retries in case it throws an exception
     example:
         def foo(a, k=0, verbose=False):
             ...
@@ -676,18 +741,20 @@ def wrapretry(func, args=(), kwargs={}, *, attempts=3, backoffseconds=10, backof
         print(f"        bofactor: {backofffactor}")
         print(f"        verbose : {verbose}")
 
+    totalbackoffseconds = 0
     for attempt in range(1, attempts+1):
 
         if (attempt > 1):
             if verbose: print(f"wrapretry( {func.__name__} ) - sleep {backoffseconds} seconds before retry")
             time.sleep(backoffseconds)
+            totalbackoffseconds += backoffseconds
             backoffseconds = backoffseconds*backofffactor
 
         try:
             if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} starts")
             result = func(*args, **kwargs)
-            if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} SUCCESS")
-            if (attempt > 1): logging.info(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} SUCCESS")
+            if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} SUCCESS (total backoff {totalbackoffseconds})")
+            if (attempt > 1): logging.info(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} SUCCESS  (total backoff {totalbackoffseconds})")
             break
         except TypeError  as e:
             #
@@ -698,13 +765,13 @@ def wrapretry(func, args=(), kwargs={}, *, attempts=3, backoffseconds=10, backof
             #
             #    might be more specific, but  where would it all end...
             #
-            if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED")
-            logging.warning(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED: Exception({str(e)})")
+            if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED (total backoff {totalbackoffseconds})")
+            logging.warning(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED (total backoff {totalbackoffseconds}): Exception({str(e)})")
             last_exception = e
 
     else: # for - else (for loop did not 'break')
-        if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED - re-raising last Exception({str(last_exception)})")
-        logging.error(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED - re-raising last Exception({str(last_exception)})")
+        if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED (total backoff {totalbackoffseconds}) - re-raising last Exception({str(last_exception)})")
+        logging.error(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED (total backoff {totalbackoffseconds}) - re-raising last Exception({str(last_exception)})")
         raise last_exception
 
     return result
