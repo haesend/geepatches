@@ -190,7 +190,7 @@ class GEEExp(object):
             self._exportimages, 
             args=(eeimagecollection, szoutputdir),
             kwargs={'szfilenameprefix':szfilenameprefix, 'verbose':verbose},
-            attempts=9, backoffseconds=60, backofffactor=2, verbose=verbose) # max 1 + 2 + ... + 128 = 255 minutes
+            attempts=8, backoffseconds=60, backofffactor=2, verbose=verbose) # max 1 + 2 + ... + 64 = 127 minutes
 
     def _exportimages(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
         """
@@ -286,7 +286,7 @@ class GEEExp(object):
             self._exportimagestack, 
             args=(eeimagecollection, szoutputdir),
             kwargs={'szfilenameprefix':szfilenameprefix, 'verbose':verbose},
-            attempts=9, backoffseconds=60, backofffactor=2, verbose=verbose) # max 1 + 2 + ... + 128 = 255 minutes
+            attempts=8, backoffseconds=60, backofffactor=2, verbose=verbose) # max 1 + 2 + ... + 64 = 127 minutes
 
     def _exportimagestack(self, eeimagecollection, szoutputdir, szfilenameprefix="", verbose=False):
         """
@@ -531,7 +531,7 @@ class GEEExp(object):
             self._exportimagestacktodrive, 
             args=(eeimagecollection, szgdrivefolder),
             kwargs={'szfilenameprefix':szfilenameprefix, 'verbose':verbose},
-            attempts=9, backoffseconds=60, backofffactor=2, verbose=verbose) # max 1 + 2 + ... + 128 = 255 minutes
+            attempts=8, backoffseconds=60, backofffactor=2, verbose=verbose) # max 1 + 2 + ... + 64 = 127 minutes
 
     def _exportimagestacktodrive(self, eeimagecollection, szgdrivefolder, szfilenameprefix="", verbose=False):
         """
