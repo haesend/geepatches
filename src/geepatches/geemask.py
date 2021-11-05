@@ -22,6 +22,12 @@ def _assertlistoflistofnumber(listoflistofnumber):
             _assertlistofnumber(listofnumber);
     except: raise ValueError("not a list of lists")
 
+def _assertexclusive(somelist, otherlist):
+    try:
+        if not set(somelist).isdisjoint(otherlist) : raise ValueError("non-disjoint lists")
+    except: raise ValueError("not a list")
+    
+
 
 """
 /**
@@ -30,6 +36,11 @@ def _assertlistoflistofnumber(listoflistofnumber):
  *             optionally an 'ignore' image can be passed, which specifies (non-zero)
  *             pixels to be excluded from the masking process (mask will always be '0')
  *
+ * e.g.
+ *   classification    values    result(mask)
+ *      1 1 2 1 1                 F F T F F
+ *      1 3 3 3 1      [2,3]      F T T T F
+ *      1 1 2 1 4                 F F T F F
  * 
  * var bazmask  = SimpleMask([9, 10]).makemask(bazscl)
  * 
@@ -46,11 +57,14 @@ def _assertlistoflistofnumber(listoflistofnumber):
 class SimpleMask:
     """
     """
-    def __init__(self, s2sclclassesarray):
+    def __init__(self, s2sclclassesarray, binvert=False):
         """
+        :param s2sclclassesarray: list (python list, NOT ee.List) of class values to be masked
+        :param binvert: invert the mask (optional, default Fals)
         """
         _assertlistofnumber(s2sclclassesarray)
         self.ees2sclclasseslist = ee.List(s2sclclassesarray)
+        self.binvert = binvert
  
     def makemask(self, s2sclimage, ignoremaskimage=None):
         """
@@ -62,6 +76,7 @@ class SimpleMask:
             return currentreturningmaskimage
         
         maskimage = ee.Image(self.ees2sclclasseslist.iterate(eeiterfunction, ee.Image(0))) # should be 'false' image
+        if self.binvert   : maskimage = maskimage.Not()
         if ignoremaskimage: maskimage = maskimage.And(ee.Image(ignoremaskimage).Not())
         return (maskimage
                     .set('system:time_start', s2sclimage.get('system:time_start'))
@@ -95,23 +110,31 @@ class ClassFractions:
     """
     def __init__(self, s2sclclassesarray, nodataclassesarray=None):
         """
+        :param s2sclclassesarray: list (python list, NOT ee.List) of class values for which frequency (as a set) is to be calculated
+        :param nodataclassesarray: list (python list, NOT ee.List) of class values to be ignored as observation
+        :remark s2sclclassesarray and nodataclassesarray may not have common values   
         """
         _assertlistofnumber(s2sclclassesarray)
-        self.eeclasseslist = ee.List(s2sclclassesarray);
-        self.eenodatalist  = None
+        self.simpleclassesmasker = SimpleMask(s2sclclassesarray)
+        self.simplenodatamasker  = None
         if nodataclassesarray is not None:
             _assertlistofnumber(nodataclassesarray)
-            self.eenodatalist  = ee.List(nodataclassesarray);
+            _assertexclusive(nodataclassesarray, s2sclclassesarray)
+            self.simplenodatamasker = SimpleMask(nodataclassesarray)
         
     def makefractions(self, classesimagecollection):
         """
         """
-        classescollection = classesimagecollection.map(SimpleMask(self.eeclasseslist).makemask);
+        classescollection = classesimagecollection.map(self.simpleclassesmasker.makemask);
         observationscount = classescollection.count();
-        if self.eenodatalist is not None:
-            nodatacollection  = classesimagecollection.map(SimpleMask(self.eenodatalist).makemask);
+        if self.simplenodatamasker is not None:
+            nodatacollection  = classesimagecollection.map(self.simplenodatamasker.makemask);
             observationscount = observationscount.subtract(nodatacollection.sum());
-        return classescollection.sum().divide(observationscount).rename('ClassFractions');
+        return (classescollection
+                .sum()
+                .divide(observationscount)
+                .rename('ClassFractions')
+                .setDefaultProjection(classescollection.first().projection()))
 
 
 """
@@ -123,19 +146,107 @@ class ClassFractions:
 class StaticsMask:
     """
     """
-    def __init__(self, s2sclclassesarray, nodataclassesarray, threshold):
+    def __init__(self, s2sclclassesarray, nodataclassesarray, threshold, thresholdunits="percentage", eestatisticsregion=None, verbose=False):
         """
+        :param thresholdunits "percentage" or "sigma":
+            mask if fraction < fthreshold percentage
+            mask if fraction < mean - fthreshold-sigma with mean and sigma
+                mean and sigma (of the class fractions) are calculated over the specified statistics region ee.Geometry)
+                this region should be (much) larger than the actual region we're interested in to get decent statistics 
+                of course it would also be nice if this region was covered by the classesimagecollection, otherwise
+                stranger things could happen, but seldom yield desired results.
         """
         self.classfractions = ClassFractions(s2sclclassesarray, nodataclassesarray);
-        if not isinstance(threshold, numbers.Number) : raise ValueError("invalid threshold")
-        self.eethreshold    = ee.Number(threshold);
+        if not isinstance(threshold, numbers.Number)          : raise ValueError("invalid threshold")
+        if not thresholdunits in ["percentage","sigma"]       : raise ValueError("thresholdunits must be 'percentage' or 'sigma'")
+        self.thresholdunits = thresholdunits
         self.binvert        = False if (threshold > 0) else True;
+        if self.thresholdunits == "percentage":
+            if not (0 <= abs(threshold) <= 100)                : raise ValueError("invalid (absolute) threshold value")
+            self.eethreshold = ee.Number(threshold/100.).abs()
+        else:
+            if not (0 <= abs(threshold) <= 4)                  : raise ValueError("ridicule (stdev) threshold value")
+            self.eethreshold = ee.Number(threshold).abs()
+            if not isinstance(eestatisticsregion, ee.Geometry) : raise ValueError("invalid statistics region")
+            self.region = eestatisticsregion
+        self.verbose = verbose
 
     def makemask(self, classesimagecollection):
         classfractionsimage = ee.Image(self.classfractions.makefractions(classesimagecollection));
-        if self.binvert:
-            return classfractionsimage.lte(self.eethreshold.abs()).rename('StaticsLTMask');
-        return classfractionsimage.gte(self.eethreshold).rename('StaticsGTMask');
+        if self.thresholdunits == "percentage":
+            if self.binvert: 
+                if self.verbose: print(f"{str(type(self).__name__)}.makemask stat = frac.lte({self.eethreshold.getInfo()})")
+                return ee.Image(classfractionsimage.lte(self.eethreshold).rename('StaticsMask'))
+            else:            
+                if self.verbose: print(f"{str(type(self).__name__)}.makemask stat = frac.gte({self.eethreshold.getInfo()})")
+                return ee.Image(classfractionsimage.gte(self.eethreshold).rename('StaticsMask'))
+        elif self.thresholdunits == "sigma":
+            #
+            # attempt 1 - maximum kernel size is too small and it takes forever
+            #
+            # statsimage = classfractionsimage.reduceNeighborhood(ee.Reducer.stdDev().combine(ee.Reducer.mean(), sharedInputs=True), 
+            #                                                     ee.Kernel.square(100, "pixels", True, 1.0))
+            #
+            # attempt 2 - scale 255 is too small, (and reduceresolution is limited to maxPixels=65535)
+            #             and I don't know how stdev actually works with reduceresolution
+            #
+            # statsimage = (classfractionsimage
+            #               .reduceResolution(ee.Reducer.stdDev().combine(ee.Reducer.mean(), sharedInputs=True), maxPixels=65535)
+            #               .reproject(classfractionsimage.projection().scale(255,255)))
+
+            #if self.binvert: 
+            #    return classfractionsimage.lte(statsimage.select(1).subtract(statsimage.select(0).multiply(self.eethreshold))).rename('StaticsMask')
+            #else:            
+            #    return classfractionsimage.gte(statsimage.select(1).add(statsimage.select(0).multiply(self.eethreshold))).rename('StaticsMask')
+
+            #
+            # attempt 3 - works only with specific eestatisticsregion so we can use 'reduceRegion'
+            #
+            # region_mean = classfractionsimage.reduceRegion(ee.Reducer.mean(),   geometry=self.region, maxPixels = 1e13) # reluctant to use 'combine'
+            # region_sdev = classfractionsimage.reduceRegion(ee.Reducer.stdDev(), geometry=self.region, maxPixels = 1e13) # since dict is not ordered
+            # if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion mean : {region_mean.values().get(0).getInfo()}")
+            # if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion sdev : {region_sdev.values().get(0).getInfo()}")
+            # if self.binvert:
+            #     eethreshold = ee.Number(region_mean.values().get(0)).subtract(ee.Number(region_sdev.values().get(0)).multiply(self.eethreshold))
+            #     if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion thrd : {eethreshold.getInfo()} (stat = frac.lte(mean - th*sdev)")
+            #     return ee.Image(classfractionsimage.lte(eethreshold).rename('StaticsMask'))
+            # else:
+            #     eethreshold = ee.Number(region_mean.values().get(0)).add(ee.Number(region_sdev.values().get(0)).multiply(self.eethreshold))
+            #     if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion thrd : {eethreshold.getInfo()} (stat = frac.gte(mean + th*sdev)")
+            #     return ee.Image(classfractionsimage.gte(eethreshold).rename('StaticsMask'))
+
+            #
+            # attempt 4 - works only with specific eestatisticsregion so we can use 'reduceRegion', and we risk hardcoded directory names from combined reducer
+            #
+            if True:
+                region_stats = classfractionsimage.reduceRegion(ee.Reducer.mean().combine(ee.Reducer.stdDev(), sharedInputs=True), geometry=self.region, maxPixels = 1e13)
+                region_mean_value = ee.Number(region_stats.get('ClassFractions_mean'))   # someday somebody will change this naming convention, 
+                region_sdev_value = ee.Number(region_stats.get('ClassFractions_stdDev')) # next somebody else will be spending hours to find out what went wrong.
+                if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion mean : {region_mean_value.getInfo()}")
+                if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion sdev : {region_sdev_value.getInfo()}")
+                if self.binvert:
+                    region_thrd_value = region_mean_value.subtract(region_sdev_value.multiply(self.eethreshold))
+                    if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion thrd : {region_thrd_value.getInfo()} (stat = frac.lte(mean - th*sdev)")
+                    return ee.Image(classfractionsimage.lte(region_thrd_value).rename('StaticsMask'))
+                else:
+                    region_thrd_value = region_mean_value.add(region_sdev_value.multiply(self.eethreshold))
+                    if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion thrd : {region_thrd_value.getInfo()} (stat = frac.gte(mean + th*sdev)")
+                    return ee.Image(classfractionsimage.gte(region_thrd_value).rename('StaticsMask'))
+            else:
+                region_mean = classfractionsimage.reduceRegion(ee.Reducer.mean(),   geometry=self.region, maxPixels = 1e13) # reluctant to use 'combine'
+                region_sdev = classfractionsimage.reduceRegion(ee.Reducer.stdDev(), geometry=self.region, maxPixels = 1e13) # since dict is not ordered
+                if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion mean : {region_mean.values().get(0).getInfo()}")
+                if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion sdev : {region_sdev.values().get(0).getInfo()}")
+                if self.binvert:
+                    eethreshold = ee.Number(region_mean.values().get(0)).subtract(ee.Number(region_sdev.values().get(0)).multiply(self.eethreshold))
+                    if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion thrd : {eethreshold.getInfo()} (stat = frac.lte(mean - th*sdev)")
+                    return ee.Image(classfractionsimage.lte(eethreshold).rename('StaticsMask'))
+                else:
+                    eethreshold = ee.Number(region_mean.values().get(0)).add(ee.Number(region_sdev.values().get(0)).multiply(self.eethreshold))
+                    if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion thrd : {eethreshold.getInfo()} (stat = frac.gte(mean + th*sdev)")
+                    return ee.Image(classfractionsimage.gte(eethreshold).rename('StaticsMask'))
+        else:
+            raise ValueError("Not yet. TODO: implement percentiles...")
 
 
 """
