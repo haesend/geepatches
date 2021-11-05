@@ -129,6 +129,8 @@ some famous points near lichtaart, mol and elsewhere for test purposes
     ee.Geometry.Point(coords, proj)
         coords: A list of two [x,y] coordinates in the given projection
         proj: optional projection -  EPSG:4326 if unspecified.
+
+https://latitudelongitude.org/
 """
 bobspoint       = ee.Geometry.Point(4.90782, 51.20069)  # our favorite spot at Lichtaart
 hogerielenpoint = ee.Geometry.Point(4.93741, 51.24179)  # where we live
@@ -138,6 +140,8 @@ tennvenlopoint  = ee.Geometry.Point(6.19947, 51.37140)  # special 4-S2-tile poin
 half31UESpoint  = ee.Geometry.Point(3.56472, 50.83872)  # border of S2 31UES tile on 2020-01-29
 hoogeheydepoint = ee.Geometry.Point(4.91380, 51.20715)  # point near bobspoint, 2-S1-DESC tiles edge on 2018-07-25, 2-S1-ASC tiles on 2018-07-16
 pastacosipoint  = ee.Geometry.Point(3.98940, 50.49995)  # point somwhere around Mons, 2-S1-DESC tiles edge on 2018-02-24 (about 25% of observations in 2018)
+brusselspoint   = ee.Geometry.Point(4.34878, 50.85045)  # brussels
+antwerppoint    = ee.Geometry.Point(4.40346, 51.21989)  # antwerp
 
 fleecycloudsday = ee.Date('2018-07-12')                 # schapewolkjes over Belgium
 half31UESday    = ee.Date('2020-01-29')                 # S2 31UES only upper left containing data
@@ -789,14 +793,20 @@ def szimagecollectioninfo(eeimagecollection, verbose=True):
     ee.ImageCollection.size()           is an ee.Number
     ee.ImageCollection.size().getInfo() is an int
     """
-    if isinstance(eeimagecollection, ee.Image): eeimagecollection = ee.ImageCollection(eeimagecollection)
+    sz  = ''
+
+    if isinstance(eeimagecollection, ee.Image): 
+        sz  = 'single image:'
+        eeimagecollection = ee.ImageCollection(eeimagecollection)
+    elif(isinstance(eeimagecollection, ee.ImageCollection)):
+        sz  = 'image collection:'
+    else:
+        if verbose: print(f"{pathlib.Path(__file__).stem}:szimagecollectioninfo 'eeimagecollection' parameter invalid type ({type(eeimagecollection)})")
 
     try:
         imagecollectionsize = eeimagecollection.size().getInfo()
     except Exception as e:
         return f"Invalid collection ({str(e)})"
-
-    sz  = ''
     
     if (imagecollectionsize <= 0): 
         sz += " size: 0. Empty collection. \n"
@@ -927,7 +937,7 @@ def szestimatevaluesinfo(eeimagecollection, verbose=True):
     estimate the value ranges over the bands of the images in a collection
     'estimate' since we'll be using 
     - the scale of the projection of first band of the first image,
-    - the geometry of the the first image,
+    - the geometry of the the first image, (works only for bounded images - prevent problem by clipping to a region)
     - let gee do its 'bestEffort' ("User memory limit exceeded.")
     - and the mystic 'tileScale' ("Output of image computation is too large")
     
