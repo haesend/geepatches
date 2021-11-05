@@ -513,8 +513,7 @@ class GEECol_s2sclconvmask(GEECol_s2scl):
         def convmask(image):
             return (geemask.ConvMask( [[2, 4, 5, 6, 7], [3, 8, 9, 10, 11]], [20*9, 20*101], [-0.057, 0.025] )
                     .makemask(image)
-                    .unmask(255, False)  # sameFootprint=False: otherwise missing beyond footprint becomes 0
-                    .toUint8()           # uint8 [0:not masked, 1:masked], no data: 255)
+                    .toUint8()           # uint8 [0:not masked, 1:masked]  (obsolete ?)
                     .rename('MASK')
                     .copyProperties(image, ['system:time_start', 'gee_date']))
         eeimagecollection = eeimagecollection.map(convmask)
@@ -536,6 +535,68 @@ class GEECol_s2sclconvmask(GEECol_s2scl):
         'S2 half tiles' (e.g. 31UES on '2020-01-29') have limited their footprint to the area 
         where data lives, thus *NOT* the full 31UES footprint
         when exporting masks [0,1] for these images, we'll indicate the unknown area with 255 as no data
+        
+          0: not masked (clear sky)
+          1: masked     (belgian sky)
+        255: no data    (belgian politics)
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .unmask(255, False)    # no data to 255
+                                                                 .toUint8()))           # actually obsolete here
+        return eeimagecollection
+
+
+"""
+"""
+class GEECol_s2sclstaticsmask(GEECol_s2scl):
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        #
+        # daily mosaiced scl collection starting one year before eedatefrom
+        #
+        eesclimgcollection = super().collect(eeroi, eedatefrom, eedatetill, verbose=verbose)
+        #
+        # assume target region small related to statisticsregion
+        #
+        s2sclclassesarray  = [8,9,10]                                                            # in clouds we trust
+        nodataclassesarray = []                                                                  # shouldn't be needed in gee
+        theshold           = 2                                                                   # strict - lose about 2.1 % 
+        thresholdunits     = "sigma"                                                             # using sigma hoping this works everywhere
+        eestatisticsregion = geeutils.squareareaboundsroi(eeroi.centroid(maxError=0.001), 25000) # typical s2 tile is 100km x 100km
+
+        # s2sclclassesarray  = [8,9,10]                                                            # in clouds we trust
+        # nodataclassesarray = []                                                                  # shouldn't be needed in gee
+        # theshold           = 70                                                                  # strict - lose about 2.1 % 
+        # thresholdunits     = "percentage"                                                        # using sigma hoping this works everywhere
+        # eestatisticsregion = None
+        
+        staticsmask        = ( ee.Image(geemask.StaticsMask(
+            s2sclclassesarray, 
+            nodataclassesarray, 
+            theshold, 
+            thresholdunits, 
+            eestatisticsregion, 
+            verbose=verbose)
+            .makemask(eesclimgcollection)
+            .toUint8()           # uint8 [0:not masked, 1:masked]  (obsolete ?)
+            .rename('STATICS')
+            .copyProperties(eesclimgcollection.first(), ['system:time_start', 'gee_date'])))
+        #
+        #    add collection properties describing this collection
+        #       
+        eeimagecollection = ee.ImageCollection(staticsmask).set('gee_description', 's2sclstaticsmask')
+        #
+        #
+        #
+        return eeimagecollection
+
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        'S2 half tiles' (e.g. 31UES on '2020-01-29') have limited their footprint to the area 
+        where data lives, thus *NOT* the full 31UES footprint
+        when exporting masks [0,1] for these images, we'll indicate the unknown area with 255 as no data
+
+        since staticsmask is supposed to use large date ranges, this actually schouldn't matter here
         
           0: not masked (clear sky)
           1: masked     (belgian sky)
@@ -618,6 +679,7 @@ class GEECol_s2rgb(GEECol, OrdinalProjectable):
                                                                  .unmask(0, False)      # no data to 0 as esa intended
                                                                  .toUint8()))
         return eeimagecollection
+
 
 """
 """

@@ -12,6 +12,7 @@ import geeproduct
 import geeexport
 
 
+
 #
 #
 #
@@ -20,7 +21,7 @@ IAMRUNNINGONTHEMEP = False
 #
 #    available products
 #
-EXPORTABLEPRODUCTS = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2scl", "S2sclconvmask", "S2tcirgb", "S2cloudlessmask",
+EXPORTABLEPRODUCTS = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2scl", "S2sclconvmask", "S2tcirgb", "S2cloudlessmask", "s2sclstaticsmask",
                       "S1sigma0", "S1gamma0", "S1rvi",
                       "PV333ndvi", "PV333ndvi_he", "PV333sm", "PV333smsimplemask", "PV333rgb"]
 #
@@ -84,7 +85,7 @@ class GEEExporter():
         #    using sentinel 2 20m as reference
         #
         refcol    = geeproduct.GEECol_s2scl()
-        refcolpix = 128 #64
+        refcolpix = 64  #128 #64
         #
         #    heuristics for other products
         #
@@ -103,6 +104,7 @@ class GEEExporter():
         if "S2sclconvmask"     in self.szproducts: yield geeproduct.GEECol_s2sclconvmask().getcollection(      eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
         if "S2tcirgb"          in self.szproducts: yield geeproduct.GEECol_s2rgb().getcollection(              eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
         if "S2cloudlessmask"   in self.szproducts: yield geeproduct.GEECol_s2cloudlessmask().getcollection(    eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if "s2sclstaticsmask"  in self.szproducts: yield geeproduct.GEECol_s2sclstaticsmask().getcollection(   eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
  
         if "S1sigma0"          in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
         if "S1sigma0"          in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
@@ -366,6 +368,39 @@ def export_shape(lstszproducts, lstszmethods, szyyyyyear, szshapefile, szoutputd
 
 """
 demonstrator - including logging & furniture: export random points - only exportimages method supported
+
+    uses 'COPERNICUS/Landcover/100m/Proba-V-C3/Global' 'discrete_classification' band
+    - https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_Landcover_100m_Proba-V-C3_Global
+    - discarding Unknown, Snow and ice, Permanent water bodies, Oceans, seas.
+    - results grouped per land-use in subdirectories
+
+    - discrete_classification Class Table:
+        
+        Value    Color    Description
+        0      282828    Unknown. No or not enough satellite data available.
+        20     FFBB22    Shrubs. Woody perennial plants with persistent and woody stems and without any defined main stem being less than 5 m tall. The shrub foliage can be either evergreen or deciduous.
+        30     FFFF4C    Herbaceous vegetation. Plants without persistent stem or shoots above ground and lacking definite firm structure. Tree and shrub cover is less than 10 %.
+        40     F096FF    Cultivated and managed vegetation / agriculture. Lands covered with temporary crops followed by harvest and a bare soil period (e.g., single and multiple cropping systems). Note that perennial woody crops will be classified as the appropriate forest or shrub land cover type.
+        50     FA0000    Urban / built up. Land covered by buildings and other man-made structures.
+        60     B4B4B4    Bare / sparse vegetation. Lands with exposed soil, sand, or rocks and never has more than 10 % vegetated cover during any time of the year.
+        70     F0F0F0    Snow and ice. Lands under snow or ice cover throughout the year.
+        80     0032C8    Permanent water bodies. Lakes, reservoirs, and rivers. Can be either fresh or salt-water bodies.
+        90     0096A0    Herbaceous wetland. Lands with a permanent mixture of water and herbaceous or woody vegetation. The vegetation can be present in either salt, brackish, or fresh water.
+        100    FAE6A0    Moss and lichen.
+        111    58481F    Closed forest, evergreen needle leaf. Tree canopy >70 %, almost all needle leaf trees remain green all year. Canopy is never without green foliage.
+        112    009900    Closed forest, evergreen broad leaf. Tree canopy >70 %, almost all broadleaf trees remain green year round. Canopy is never without green foliage.
+        113    70663E    Closed forest, deciduous needle leaf. Tree canopy >70 %, consists of seasonal needle leaf tree communities with an annual cycle of leaf-on and leaf-off periods.
+        114    00CC00    Closed forest, deciduous broad leaf. Tree canopy >70 %, consists of seasonal broadleaf tree communities with an annual cycle of leaf-on and leaf-off periods.
+        115    4E751F    Closed forest, mixed.
+        116    007800    Closed forest, not matching any of the other definitions.
+        121    666000    Open forest, evergreen needle leaf. Top layer- trees 15-70 % and second layer- mixed of shrubs and grassland, almost all needle leaf trees remain green all year. Canopy is never without green foliage.
+        122    8DB400    Open forest, evergreen broad leaf. Top layer- trees 15-70 % and second layer- mixed of shrubs and grassland, almost all broadleaf trees remain green year round. Canopy is never without green foliage.
+        123    8D7400    Open forest, deciduous needle leaf. Top layer- trees 15-70 % and second layer- mixed of shrubs and grassland, consists of seasonal needle leaf tree communities with an annual cycle of leaf-on and leaf-off periods.
+        124    A0DC00    Open forest, deciduous broad leaf. Top layer- trees 15-70 % and second layer- mixed of shrubs and grassland, consists of seasonal broadleaf tree communities with an annual cycle of leaf-on and leaf-off periods.
+        125    929900    Open forest, mixed.
+        126    648C00    Open forest, not matching any of the other definitions.
+        200    000080    Oceans, seas. Can be either fresh or salt-water bodies.
+
 """
 def export_random_points(lstszproducts, szyyyyyear, szoutputdir, pulse=None, verbose=False):
     """
@@ -581,8 +616,8 @@ def demo_export_random_points():
     #
     #
     testproducts = ["S2ndvi", "S2fapar", "S2sclconvmask",  "S1sigma0"]
-    testproducts = ["S2ndvi", "S2scl"]
-    szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
+    testproducts = ["s2sclstaticsmask"]
+    szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/s2sclstaticsmask_(8 9 10)_2sigma" if IAMRUNNINGONTHEMEP else r"C:\tmp"
     szyyyyyear   = 2019    
     verbose      = False    
     #
