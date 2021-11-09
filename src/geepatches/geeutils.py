@@ -147,6 +147,8 @@ fleecycloudsday = ee.Date('2018-07-12')                 # schapewolkjes over Bel
 half31UESday    = ee.Date('2020-01-29')                 # S2 31UES only upper left containing data
 hoogeheydeASCday= ee.Date('2018-07-16')                 # 2-S1-ASC  tiles edge @hoogeheydepoint
 hoogeheydeDESday= ee.Date('2018-07-25')                 # 2-S1-DESC tiles edge @hoogeheydepoint
+clearskyday     = ee.Date('2019-08-24')                 # nice day, at least in brussels, dessel and lichtaart
+
 
 """
 some convenience functions to create test images
