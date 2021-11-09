@@ -1,6 +1,7 @@
 #
 #  
 #
+import numbers
 import ee
 import geeutils
 import geebiopar
@@ -550,31 +551,77 @@ class GEECol_s2sclconvmask(GEECol_s2scl):
 """
 class GEECol_s2sclstaticsmask(GEECol_s2scl):
 
+    def __init__(self, s2sclclassesarray=None, threshold=None, thresholdunits=None, statisticsareametersradius=None):
+        """
+        :param s2sclclassesarray: list of s2 scl classes
+        :param thresholdunits: "sigma" or "percentage" - defaults to "sigma" 
+        :param threshold: threshold value. can be absolute percentage or based on regional statistics
+                 - thresholdunits: "sigma":      +/- ]0,4]   - mask if frequency >= mean + threshold * sigma or frequency <= mean -  abs(threshold) * sigma
+                 - thresholdunits: "percentage": +/- [1,100] - mask if frequency >= threshold                or frequency < abs(threshold)
+                                                 (using values [1,100] to avoid confusion between fractions and percentages)
+        :param statisticsareametersradius: (only for thresholdunits="sigma") specifies the region over which mean and sigma will be calculated
+                 - actual area is square with radius statisticsareametersradius
+                 - this area is assumed to be "large" with respect to the actual target region (in .collect)
+        """
+        
+        if s2sclclassesarray is None: 
+            self.s2sclclassesarray = [8,9,10]                                 # default: in clouds we trust
+        else:
+            if not isinstance(s2sclclassesarray, list)                        : raise ValueError("s2sclclassesarray expected to be a list")
+            for number in s2sclclassesarray:
+                if not isinstance(number, numbers.Number)                     : raise ValueError("s2sclclassesarray expected to be a list of integers")
+                if not (0 <= number <= 11)                                    : raise ValueError("ridicule s2 scl class value (expected [0,11])")
+            
+            self.s2sclclassesarray = s2sclclassesarray
+
+        if thresholdunits is None: 
+            self.thresholdunits = "sigma"                                     # default: threshold based on regional statistics
+        else:
+            if not thresholdunits in ["percentage","sigma"]                   : raise ValueError("thresholdunits expected to be 'percentage' or 'sigma'")
+            self.thresholdunits = thresholdunits
+        
+        if self.thresholdunits == "sigma":
+            if threshold is None:
+                self.threshold = 2                                            # default: strict - lose only about 2.1 % (assuming a normal distribution)
+            else:
+                if not isinstance(threshold, numbers.Number)                  : raise ValueError("invalid threshold")
+                if not (0 < abs(threshold) <= 4)                              : raise ValueError("ridicule (stdev) threshold value (expected ]0,4])")
+                self.threshold = threshold
+            
+            if statisticsareametersradius is None:
+                self.metersradius = 25000                                     # default: about a quarter of typical s2 tile ( which is 100km x 100km )
+            else:
+                if not isinstance(statisticsareametersradius, numbers.Number) : raise ValueError("invalid statisticsareametersradius")
+                if ( statisticsareametersradius < 500)                        : raise ValueError("ridicule statisticsareametersradius value (expected min 500)")
+                self.metersradius = statisticsareametersradius
+                
+        else:
+            if threshold is None:
+                self.threshold = 70
+            else:
+                if not isinstance(threshold, numbers.Number)                  : raise ValueError("invalid threshold")
+                if not (1 <= abs(threshold) <= 100)                           : raise ValueError("invalid (absolute) threshold value  (expected +/- [1, 100]")
+                self.threshold = threshold
+            self.metersradius = 0                                             # not used with absolute thresholds                
+
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
-        # daily mosaiced scl collection starting one year before eedatefrom
+        # daily mosaiced scl collection
         #
         eesclimgcollection = super().collect(eeroi, eedatefrom, eedatetill, verbose=verbose)
         #
-        # assume target region small related to statisticsregion
         #
-        s2sclclassesarray  = [8,9,10]                                                            # in clouds we trust
-        nodataclassesarray = []                                                                  # shouldn't be needed in gee
-        theshold           = 2                                                                   # strict - lose about 2.1 % 
-        thresholdunits     = "sigma"                                                             # using sigma hoping this works everywhere
-        eestatisticsregion = geeutils.squareareaboundsroi(eeroi.centroid(maxError=0.001), 25000) # typical s2 tile is 100km x 100km
-
-        # s2sclclassesarray  = [8,9,10]                                                            # in clouds we trust
-        # nodataclassesarray = []                                                                  # shouldn't be needed in gee
-        # theshold           = 70                                                                  # strict - lose about 2.1 % 
-        # thresholdunits     = "percentage"                                                        # using sigma hoping this works everywhere
-        # eestatisticsregion = None
-        
+        #
+        if self.thresholdunits == "sigma": eestatisticsregion = geeutils.squareareaboundsroi(eeroi.centroid(maxError=0.001), self.metersradius)
+        else:                              eestatisticsregion = None
+        #
+        #
+        #
         staticsmask        = ( ee.Image(geemask.StaticsMask(
-            s2sclclassesarray, 
-            nodataclassesarray, 
-            theshold, 
-            thresholdunits, 
+            self.s2sclclassesarray, 
+            None, 
+            self.threshold, 
+            self.thresholdunits, 
             eestatisticsregion, 
             verbose=verbose)
             .makemask(eesclimgcollection)
@@ -582,7 +629,7 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
             .rename('STATICS')
             .copyProperties(eesclimgcollection.first(), ['system:time_start', 'gee_date'])))
         #
-        #    add collection properties describing this collection
+        #    make (single image) collection and add properties describing this collection
         #       
         eeimagecollection = ee.ImageCollection(staticsmask).set('gee_description', 's2sclstaticsmask')
         #
@@ -660,7 +707,7 @@ class GEECol_s2rgb(GEECol, OrdinalProjectable):
         #
         #    apply median composite in case of overlapping images on same day
         #    could be refined (e.g. select value with max ndvi) but worldcover 
-        #     uses median too, and this is just an experimental class anyway.
+        #    uses median too, and this is just an experimental class anyway.
         #
         eeimagecollection = geeutils.mosaictodate(eeimagecollection, szmethod="median", verbose=verbose)
         #
