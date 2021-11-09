@@ -565,7 +565,7 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
         """
         
         if s2sclclassesarray is None: 
-            self.s2sclclassesarray = [8,9,10]                                 # default: in clouds we trust
+            self.s2sclclassesarray = [3,8,9,10]                               # default: in clouds we trust
         else:
             if not isinstance(s2sclclassesarray, list)                        : raise ValueError("s2sclclassesarray expected to be a list")
             for number in s2sclclassesarray:
