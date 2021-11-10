@@ -312,11 +312,13 @@ class SingleConvMask:
 /**
  * ConvMask: combine muliple SingleConvMask's
  * 
- * var bazmask  = ConvMask([2,4,5,6,7], [3,8,9,10,11]], [20*9, 20*101], [-0.057, 0.025]).makemask(bazscl)
- * var cmmaker  = ConvMask([2,4,5,6,7], [3,8,9,10,11]], [20*9, 20*101], [-0.057, 0.025])
+ * var bazmask  = ConvMask([[2,4,5,6,7], [3,8,9,10,11]], [20*9, 20*101], [-0.057, 0.025]).makemask(bazscl)
+ * var cmmaker  = ConvMask([[2,4,5,6,7], [3,8,9,10,11]], [20*9, 20*101], [-0.057, 0.025])
  * var foomask  = cmmaker.makemask(fooscl)
  * var barmask  = cmmaker.makemask(barscl)
- * 
+ *
+ * var eggsmask = SingleConvMask( [9, 10],   101*20,   0.0003 ).makemask(fooscl) # simple
+ * var spammask = ConvMask(      [[9, 10]], [101*20], [0.0003]).makemask(fooscl) # conv emulating single simple - mind the syntax
  */
  """
 class ConvMask:
