@@ -9,6 +9,7 @@ __general__
 <br> e.g. weird footprint of 'angle' band
 <br> ...
 
+
 ***
 __utilities and obtaining reference roi__
 - ex_0100_0100_0100_geeutils_squareareaboundsroi: tryout geeutils.squareareaboundsroi method
@@ -16,6 +17,7 @@ __utilities and obtaining reference roi__
 - ex_0100_0100_0130_geeutils_centerpixelpoint: tryout geeutils.pixelcenterpoint and geeutils.pixelinterspoint methods
 - ex_0300_0100_0100_geeutils_selection_reference_point: shift point to pixel center or raster intersection for odd/even roi's
 - ex_0300_0100_0200_geeutils_selection_reference_roi: matching reference roi to other products
+
 
 ***
 __GEECol classes__ :
@@ -27,3 +29,12 @@ __GEECol classes__ :
 ***
 __GEEExp class__ :
 - ex_0700_0100_0100_geeexport: demo GEEExp.exportimages
+
+***
+__classification based masks__ :
+- ex_2000_0100_0100_geemask_SimpleMask: mask by specific class values in a classification
+- ex_2000_0100_0200_geemask_ClassFractions: obtain frequencies of class values in a collection of classifications
+- ex_2000_0100_0400_geemask_ConvMask: mask by convoluting class values in a classification
+- ex_2000_0100_0500_geemask_StaticsMask: mask by applying threshold on frequencies of class values in a collection of classifications
+
+
