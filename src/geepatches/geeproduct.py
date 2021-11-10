@@ -502,6 +502,19 @@ class GEECol_s2scl(GEECol, CategoricalProjectable):
 """
 """
 class GEECol_s2sclconvmask(GEECol_s2scl):
+    """
+    """
+    def __init__(self, lsts2sclclassesarray=None, lstwindowsizeinmeters=None, lstthreshold=None):
+        """
+        """
+        if lsts2sclclassesarray is None:
+            lsts2sclclassesarray =  [[2, 4, 5, 6, 7], [3, 8, 9, 10, 11]]
+        if lstwindowsizeinmeters is None:
+            lstwindowsizeinmeters = [20*9, 20*101]
+        if lstthreshold is None:
+            lstthreshold =  [-0.057, 0.025]
+        
+        self.maskmaker = geemask.ConvMask(lsts2sclclassesarray, lstwindowsizeinmeters, lstthreshold)
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
@@ -512,7 +525,7 @@ class GEECol_s2sclconvmask(GEECol_s2scl):
         #
         #
         def convmask(image):
-            return (geemask.ConvMask( [[2, 4, 5, 6, 7], [3, 8, 9, 10, 11]], [20*9, 20*101], [-0.057, 0.025] )
+            return (self.maskmaker
                     .makemask(image)
                     .toUint8()           # uint8 [0:not masked, 1:masked]  (obsolete ?)
                     .rename('MASK')
