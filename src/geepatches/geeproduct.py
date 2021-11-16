@@ -399,10 +399,18 @@ class GEECol_s2fapar(GEECol, OrdinalProjectable):
         #
         #    base collection
         #
+        #    beware: apparently the collection contains some images with missing properties
+        #            e.g. ee.Image('COPERNICUS/S2_SR/20190117T061209_20190117T061411_T42TVK')
+        #
+        #            geebiopar.get_s2fapar3band expects 'MEAN_INCIDENCE_ZENITH_ANGLE_B8', 'MEAN_SOLAR_ZENITH_ANGLE', 
+        #            'MEAN_SOLAR_AZIMUTH_ANGLE' and 'MEAN_INCIDENCE_AZIMUTH_ANGLE_B8' to be available,
+        #            hence the additional "notNull" filter
+        #
         eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
                              .select(['B3', 'B4', 'B8'])
                              .filterBounds(eeroi)
-                             .filter(ee.Filter.date(eedatefrom, eedatetill)))
+                             .filter(ee.Filter.date(eedatefrom, eedatetill))
+                             .filter(ee.Filter.notNull(['MEAN_INCIDENCE_ZENITH_ANGLE_B8', 'MEAN_SOLAR_ZENITH_ANGLE', 'MEAN_SOLAR_AZIMUTH_ANGLE', 'MEAN_INCIDENCE_AZIMUTH_ANGLE_B8'])))
         #
         #    apply fapar network
         #
