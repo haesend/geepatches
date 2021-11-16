@@ -148,38 +148,56 @@ class StaticsMask:
     """
     def __init__(self, s2sclclassesarray, nodataclassesarray, threshold, thresholdunits="percentage", eestatisticsregion=None, verbose=False):
         """
-        :param thresholdunits "percentage" or "sigma":
-            mask if fraction < fthreshold percentage
-            mask if fraction < mean - fthreshold-sigma with mean and sigma
-                mean and sigma (of the class fractions) are calculated over the specified statistics region ee.Geometry)
+        :param thresholdunits "sigma", "percentage" or "percentile":
+
+                              negative threshold                                      positive theshold
+            "percentage" :      mask if fraction <= abs(fthreshold/100)                 fraction >=  fthreshold/100
+            "sigma":            mask if fraction <= mean - abs(fthreshold) x sigma      fraction >= mean + fthreshold x sigma 
+            "percentile"        mask if fraction <= percentile(abs(fthreshold))         fraction >= percentile(fthreshold)
+
+                mean, sigma and percentiles (of the class fractions) are calculated over the specified statistics region ee.Geometry)
                 this region should be (much) larger than the actual region we're interested in to get decent statistics 
                 of course it would also be nice if this region was covered by the classesimagecollection, otherwise
                 stranger things could happen, but seldom yield desired results.
         """
         self.classfractions = ClassFractions(s2sclclassesarray, nodataclassesarray);
-        if not isinstance(threshold, numbers.Number)          : raise ValueError("invalid threshold")
-        if not thresholdunits in ["percentage","sigma"]       : raise ValueError("thresholdunits must be 'percentage' or 'sigma'")
+        if not isinstance(threshold, numbers.Number)                  : raise ValueError("invalid threshold")
+        if not thresholdunits in ["percentage","sigma", "percentile"] : raise ValueError("thresholdunits must be 'percentage', 'sigma' or 'percentile'")
         self.thresholdunits = thresholdunits
         self.binvert        = False if (threshold > 0) else True;
-        if self.thresholdunits == "percentage":
-            if not (0 <= abs(threshold) <= 100)                : raise ValueError("invalid (absolute) threshold value")
-            self.eethreshold = ee.Number(threshold/100.).abs()
-        else:
+        if self.thresholdunits == "sigma":
             if not (0 <= abs(threshold) <= 4)                  : raise ValueError("ridicule (stdev) threshold value")
             self.eethreshold = ee.Number(threshold).abs()
+        else:
+            if not (0 <= abs(threshold) <= 100)                : raise ValueError("invalid threshold value")
+            self.eethreshold = ee.Number(threshold).abs()
+        if self.thresholdunits != "percentage":
             if not isinstance(eestatisticsregion, ee.Geometry) : raise ValueError("invalid statistics region")
             self.region = eestatisticsregion
+
         self.verbose = verbose
 
     def makemask(self, classesimagecollection):
         classfractionsimage = ee.Image(self.classfractions.makefractions(classesimagecollection));
+
         if self.thresholdunits == "percentage":
             if self.binvert: 
-                if self.verbose: print(f"{str(type(self).__name__)}.makemask stat = frac.lte({self.eethreshold.getInfo()})")
-                return ee.Image(classfractionsimage.lte(self.eethreshold).rename('StaticsMask'))
+                if self.verbose: print(f"{str(type(self).__name__)}.makemask stat = frac.lte({self.eethreshold.getInfo()}%)")
+                return ee.Image(classfractionsimage.lte(self.eethreshold.divide(100)).rename('StaticsMask'))
             else:            
-                if self.verbose: print(f"{str(type(self).__name__)}.makemask stat = frac.gte({self.eethreshold.getInfo()})")
-                return ee.Image(classfractionsimage.gte(self.eethreshold).rename('StaticsMask'))
+                if self.verbose: print(f"{str(type(self).__name__)}.makemask stat = frac.gte({self.eethreshold.getInfo()}%)")
+                return ee.Image(classfractionsimage.gte(self.eethreshold.divide(100)).rename('StaticsMask'))
+
+        elif self.thresholdunits == "percentile":
+            region_stats = classfractionsimage.reduceRegion(ee.Reducer.percentile([self.eethreshold]), geometry=self.region, maxPixels = 1e13)
+            eethreshold = ee.Number(region_stats.values().get(0))
+            if self.binvert: 
+                if self.verbose: print(f"{str(type(self).__name__)}.makemask stat = frac.lte({eethreshold.getInfo()}) from percentile({self.eethreshold.getInfo()})")
+                return ee.Image(classfractionsimage.lte(eethreshold).rename('StaticsMask'))
+            else:            
+                if self.verbose: print(f"{str(type(self).__name__)}.makemask stat = frac.gte({eethreshold.getInfo()}) from percentile({self.eethreshold.getInfo()})")
+                return ee.Image(classfractionsimage.gte(eethreshold).rename('StaticsMask'))
+            
         elif self.thresholdunits == "sigma":
             #
             # attempt 1 - maximum kernel size is too small and it takes forever
@@ -246,7 +264,7 @@ class StaticsMask:
                     if self.verbose: print(f"{str(type(self).__name__)}.makemask eestatisticsregion thrd : {eethreshold.getInfo()} (stat = frac.gte(mean + th*sdev)")
                     return ee.Image(classfractionsimage.gte(eethreshold).rename('StaticsMask'))
         else:
-            raise ValueError("Not yet. TODO: implement percentiles...")
+            raise ValueError("Not yet. TODO: ...")
 
 
 """

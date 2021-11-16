@@ -575,16 +575,19 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
     def __init__(self, s2sclclassesarray=None, threshold=None, thresholdunits=None, statisticsareametersradius=None):
         """
         :param s2sclclassesarray: list of s2 scl classes
-        :param thresholdunits: "sigma" or "percentage" - defaults to "sigma" 
+        :param thresholdunits: "sigma", "percentage" or "percentile" - defaults to "sigma" 
         :param threshold: threshold value. can be absolute percentage or based on regional statistics
                  - thresholdunits: "sigma":      +/- ]0,4]   - mask if frequency >= mean + threshold * sigma or frequency <= mean -  abs(threshold) * sigma
+                 - thresholdunits: "percentile": +/- [1,100] - mask if frequency >= percentile(threshold)    or frequency < percentile(abs(threshold))
                  - thresholdunits: "percentage": +/- [1,100] - mask if frequency >= threshold                or frequency < abs(threshold)
                                                  (using values [1,100] to avoid confusion between fractions and percentages)
         :param statisticsareametersradius: (only for thresholdunits="sigma") specifies the region over which mean and sigma will be calculated
                  - actual area is square with radius statisticsareametersradius
                  - this area is assumed to be "large" with respect to the actual target region (in .collect)
         """
-        
+        #
+        # s2sclclassesarray
+        #
         if s2sclclassesarray is None: 
             self.s2sclclassesarray = [3,8,9,10]                               # default: in clouds we trust
         else:
@@ -595,12 +598,18 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
             
             self.s2sclclassesarray = s2sclclassesarray
 
+        #
+        # thresholdunits
+        #
         if thresholdunits is None: 
             self.thresholdunits = "sigma"                                     # default: threshold based on regional statistics
         else:
-            if not thresholdunits in ["percentage","sigma"]                   : raise ValueError("thresholdunits expected to be 'percentage' or 'sigma'")
+            if not thresholdunits in ["percentage", "sigma", "percentile"]    : raise ValueError("thresholdunits expected to be 'percentage', 'sigma' or 'percentile'")
             self.thresholdunits = thresholdunits
-        
+
+        #
+        # threshold
+        #
         if self.thresholdunits == "sigma":
             if threshold is None:
                 self.threshold = 2                                            # default: strict - lose only about 2.1 % (assuming a normal distribution)
@@ -609,23 +618,37 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
                 if not (0 < abs(threshold) <= 4)                              : raise ValueError("ridicule (stdev) threshold value (expected ]0,4])")
                 self.threshold = threshold
             
+        else:
+            if threshold is not None:
+                if not isinstance(threshold, numbers.Number)                  : raise ValueError("invalid threshold")
+                if not (1 <= abs(threshold) <= 100)                           : raise ValueError("invalid threshold value  (expected +/- [1, 100]")
+                self.threshold = threshold
+            else:
+                if self.thresholdunits == "percentage":
+                    self.threshold = 70                                       # default for "percentage"
+                else:
+                    self.threshold = 98                                       # default for "percentile"
+
+
+        #
+        # regional statistics area
+        #
+        if self.thresholdunits == "percentage":
+            self.metersradius = 0                                             # not used with absolute thresholds                
+        else:
             if statisticsareametersradius is None:
                 self.metersradius = 25000                                     # default: about a quarter of typical s2 tile ( which is 100km x 100km )
             else:
                 if not isinstance(statisticsareametersradius, numbers.Number) : raise ValueError("invalid statisticsareametersradius")
                 if ( statisticsareametersradius < 500)                        : raise ValueError("ridicule statisticsareametersradius value (expected min 500)")
                 self.metersradius = statisticsareametersradius
-                
-        else:
-            if threshold is None:
-                self.threshold = 70
-            else:
-                if not isinstance(threshold, numbers.Number)                  : raise ValueError("invalid threshold")
-                if not (1 <= abs(threshold) <= 100)                           : raise ValueError("invalid (absolute) threshold value  (expected +/- [1, 100]")
-                self.threshold = threshold
-            self.metersradius = 0                                             # not used with absolute thresholds                
+            
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        #
+        #
+        #
+        if verbose: print(f"{str(type(self).__name__)}.collect: threshold({self.threshold} {self.thresholdunits}) area({self.metersradius} radius)")
         #
         # daily mosaiced scl collection
         #
@@ -633,8 +656,8 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
         #
         #
         #
-        if self.thresholdunits == "sigma": eestatisticsregion = geeutils.squareareaboundsroi(eeroi.centroid(maxError=0.001), self.metersradius)
-        else:                              eestatisticsregion = None
+        if self.thresholdunits != "percentage": eestatisticsregion = geeutils.squareareaboundsroi(eeroi.centroid(maxError=0.001), self.metersradius)
+        else:                                   eestatisticsregion = None
         #
         #
         #
