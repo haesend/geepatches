@@ -643,7 +643,6 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
                 if ( statisticsareametersradius < 500)                        : raise ValueError("ridicule statisticsareametersradius value (expected min 500)")
                 self.metersradius = statisticsareametersradius
             
-
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
         #
@@ -675,7 +674,8 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
         #
         #    make (single image) collection and add properties describing this collection
         #       
-        eeimagecollection = ee.ImageCollection(staticsmask).set('gee_description', 's2sclstaticsmask')
+        szdescription = "s2sclstaticsmask(" + str(self.threshold) + self.thresholdunits + ")"
+        eeimagecollection = ee.ImageCollection(staticsmask).set('gee_description', szdescription)
         #
         #
         #
@@ -696,6 +696,71 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
         eeimagecollection = eeimagecollection.map(lambda image: (image
                                                                  .unmask(255, False)    # no data to 255
                                                                  .toUint8()))           # actually obsolete here
+        return eeimagecollection
+
+
+"""
+"""
+class GEECol_s2sclclassfractions(GEECol_s2scl):
+
+    def __init__(self, s2sclclassesarray=None):
+        """
+        this class is only ment as an aid in evaluating the GEECol_s2sclstaticsmask parameters
+        :param s2sclclassesarray: list of s2 scl classes
+        """
+        #
+        # s2sclclassesarray
+        #
+        if s2sclclassesarray is None: 
+            self.s2sclclassesarray = [3,8,9,10]                               # default: in clouds we trust
+        else:
+            if not isinstance(s2sclclassesarray, list)                        : raise ValueError("s2sclclassesarray expected to be a list")
+            for number in s2sclclassesarray:
+                if not isinstance(number, numbers.Number)                     : raise ValueError("s2sclclassesarray expected to be a list of integers")
+                if not (0 <= number <= 11)                                    : raise ValueError("ridicule s2 scl class value (expected [0,11])")
+            
+            self.s2sclclassesarray = s2sclclassesarray
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        #
+        # daily mosaiced scl collection
+        #
+        eesclimgcollection = super().collect(eeroi, eedatefrom, eedatetill, verbose=verbose)
+        #
+        #
+        #
+        fractions = ( ee.Image(geemask.ClassFractions(
+            self.s2sclclassesarray, 
+            None)
+            .makefractions(eesclimgcollection)
+            .rename('FRACTIONS')
+            .copyProperties(eesclimgcollection.first(), ['system:time_start', 'gee_date'])))
+        #
+        #    make (single image) collection and add properties describing this collection
+        #       
+        eeimagecollection = ee.ImageCollection(fractions).set('gee_description', "s2sclclassfractions")
+        #
+        #
+        #
+        return eeimagecollection
+
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        we'll scale the fractions [0.0, 1.0] to percentages [0, 100]
+
+        we'll export them as Int16, 
+        *NOT as Uint8*, because my current QGIS has problems showing histograms of Uint8, 
+        *NOT as Int8*, because my current GEE exports these - according to QGIS- "Data type    Int16 - Sixteen bit signed integer" anyway
+        hence, with Int16, at least we know what we are doing, we can use 255 for no-data, and we get a decent histogram
+        ...jiezes...I just should have kept floats...
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .multiply(100)
+                                                                 .clamp(0,100)               # looses properties
+                                                                 .unmask(255, False)         # no data to 255
+                                                                 .toInt16()                  # .toUint8()
+                                                                 .copyProperties(image)
+                                                                 .copyProperties(image, ['system:time_start'])))
         return eeimagecollection
 
 
