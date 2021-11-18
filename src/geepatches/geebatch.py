@@ -21,7 +21,8 @@ IAMRUNNINGONTHEMEP = False
 #
 #    available products
 #
-EXPORTABLEPRODUCTS = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2scl", "S2sclconvmask", "S2tcirgb", "S2cloudlessmask", "s2sclstaticsmask",
+EXPORTABLEPRODUCTS = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2tcirgb",
+                      "S2scl", "S2sclconvmask", "S2cloudlessmask", "s2sclstaticsmask", "s2sclclassfractions",
                       "S1sigma0", "S1gamma0", "S1rvi",
                       "PV333ndvi", "PV333ndvi_he", "PV333sm", "PV333smsimplemask", "PV333rgb"]
 #
@@ -85,7 +86,7 @@ class GEEExporter():
         #    using sentinel 2 20m as reference
         #
         refcol    = geeproduct.GEECol_s2scl()
-        refcolpix = 64  #128 #64
+        refcolpix = 256 #64  #128 #64
         #
         #    heuristics for other products
         #
@@ -96,32 +97,37 @@ class GEEExporter():
         #
         #    generator
         #
-        if "S2ndvi"            in self.szproducts: yield geeproduct.GEECol_s2ndvi().getcollection(             eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S2ndvi_he"         in self.szproducts: yield geeproduct.GEECol_s2ndvi_he().getcollection(          eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S2fapar"           in self.szproducts: yield geeproduct.GEECol_s2fapar().getcollection(            eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S2fapar_he"        in self.szproducts: yield geeproduct.GEECol_s2fapar_he().getcollection(         eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S2scl"             in self.szproducts: yield geeproduct.GEECol_s2scl().getcollection(              eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
-        if "S2sclconvmask"     in self.szproducts: yield geeproduct.GEECol_s2sclconvmask().getcollection(      eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
-        if "S2tcirgb"          in self.szproducts: yield geeproduct.GEECol_s2rgb().getcollection(              eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S2cloudlessmask"   in self.szproducts: yield geeproduct.GEECol_s2cloudlessmask().getcollection(    eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
-        if "s2sclstaticsmask"  in self.szproducts: yield geeproduct.GEECol_s2sclstaticsmask().getcollection(   eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2ndvi"              in self.szproducts: yield geeproduct.GEECol_s2ndvi().getcollection(             eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2ndvi_he"           in self.szproducts: yield geeproduct.GEECol_s2ndvi_he().getcollection(          eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2fapar"             in self.szproducts: yield geeproduct.GEECol_s2fapar().getcollection(            eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2fapar_he"          in self.szproducts: yield geeproduct.GEECol_s2fapar_he().getcollection(         eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2scl"               in self.szproducts: yield geeproduct.GEECol_s2scl().getcollection(              eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2sclconvmask"       in self.szproducts: yield geeproduct.GEECol_s2sclconvmask().getcollection(      eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2tcirgb"            in self.szproducts: yield geeproduct.GEECol_s2rgb().getcollection(              eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2cloudlessmask"     in self.szproducts: yield geeproduct.GEECol_s2cloudlessmask().getcollection(    eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+#        if "s2sclstaticsmask"  in self.szproducts: yield geeproduct.GEECol_s2sclstaticsmask().getcollection(   eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if "s2sclstaticsmask"    in self.szproducts: 
+            yield geeproduct.GEECol_s2sclstaticsmask(threshold=98,   thresholdunits="percentile").getcollection(   eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if "s2sclstaticsmask"    in self.szproducts: 
+            yield geeproduct.GEECol_s2sclstaticsmask(threshold=2.0,  thresholdunits="sigma").getcollection(   eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if "s2sclclassfractions" in self.szproducts: yield geeproduct.GEECol_s2sclclassfractions().getcollection(    eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
  
-        if "S1sigma0"          in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1sigma0"          in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1sigma0"          in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1sigma0"          in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1gamma0"          in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1gamma0"          in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1gamma0"          in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1gamma0"          in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1rvi"             in self.szproducts: yield geeproduct.GEECol_s1rvi('ASC').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1rvi"             in self.szproducts: yield geeproduct.GEECol_s1rvi('DES').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1rvi"               in self.szproducts: yield geeproduct.GEECol_s1rvi('ASC').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1rvi"               in self.szproducts: yield geeproduct.GEECol_s1rvi('DES').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
          
-        if "PV333ndvi"         in self.szproducts: yield geeproduct.GEECol_pv333ndvi().getcollection(          eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
-        if "PV333ndvi_he"      in self.szproducts: yield geeproduct.GEECol_pv333ndvi_he().getcollection(       eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
-        if "PV333sm"           in self.szproducts: yield geeproduct.GEECol_pv333sm().getcollection(            eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
-        if "PV333smsimplemask" in self.szproducts: yield geeproduct.GEECol_pv333simplemask().getcollection(    eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
-        if "PV333rgb"          in self.szproducts: yield geeproduct.GEECol_pv333rgb().getcollection(           eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)     
+        if "PV333ndvi"           in self.szproducts: yield geeproduct.GEECol_pv333ndvi().getcollection(          eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
+        if "PV333ndvi_he"        in self.szproducts: yield geeproduct.GEECol_pv333ndvi_he().getcollection(       eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
+        if "PV333sm"             in self.szproducts: yield geeproduct.GEECol_pv333sm().getcollection(            eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
+        if "PV333smsimplemask"   in self.szproducts: yield geeproduct.GEECol_pv333simplemask().getcollection(    eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
+        if "PV333rgb"            in self.szproducts: yield geeproduct.GEECol_pv333rgb().getcollection(           eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)     
 
     #
     #    export methods
@@ -202,7 +208,7 @@ def export_point(lstszproducts, lstszmethods, szdatefrom, szdatetill, pointlon, 
         logging.info(f"{os.path.basename(__file__)[0:-3]}")
         logging.info(f"    products:  {lstszproducts}")
         logging.info(f"    exports:   {lstszmethods}")
-        logging.info(f"    point: (lon {szpointlon} lat {szpointlat} )")
+        logging.info(f"    point: (lon {szpointlon} lat {szpointlat})")
         logging.info(f"    from: {szyyyymmddfrom} till: {szyyyymmddtill}")
         logging.info(f"    output dir: {szoutputdir}")
         if ("exportimagestodrive" in lstszmethods or "exportimagestacktodrive" in lstszmethods):
@@ -404,6 +410,85 @@ demonstrator - including logging & furniture: export random points - only export
 """
 def export_random_points(lstszproducts, szyyyyyear, szoutputdir, pulse=None, verbose=False):
     """
+    TODO: shouldn't we move our Landcover checks into this generator?
+    """
+    def _newrandompointsgenerator(count=None, verbose=False):
+        while True:
+            #
+            #
+            #
+            if count is not None:
+                count -= 1
+                if count <= 0: return 
+            #
+            # assume global samples
+            #
+            longitude  = (1 - random.random())*360. - 180.
+            latitude   = random.uniform(-80,80)
+            eepoint    = ee.Geometry.Point(longitude, latitude)
+    
+            pointlon   = float(f"{eepoint.coordinates().get(0).getInfo():013.8f}")
+            pointlat   = float(f"{eepoint.coordinates().get(1).getInfo():013.8f}")
+            eepoint    = ee.Geometry.Point(pointlon, pointlat)
+    
+            if verbose: print(f"{os.path.basename(__file__)[0:-3]}: _newrandompointsgenerator: yield Point({pointlon:013.8f}, {pointlat:013.8f})")
+            yield eepoint
+    #
+    #    
+    #
+    _export_random_points(lstszproducts, szyyyyyear, szoutputdir, _newrandompointsgenerator(10, verbose), pulse=pulse, verbose=verbose)
+
+
+def export_existing_points(lstszproducts, szyyyyyear, szrootoutputdir, pulse=None, verbose=False):
+    """
+    q&d solution to revisit existing 'random' points to add products
+    """
+    def _oldrandompointsgenerator(szrootoutputdir, verbose=False):
+        verbose = True
+        #
+        # expect 'client' root directory
+        #
+        if not os.path.isdir(szrootoutputdir) : raise ValueError(f"invalid szrootoutputdir ({str(szrootoutputdir)})")  # root must exist
+        #
+        # expect 'suite' directory in this root directory
+        #
+        szoutputdir = os.path.join(szrootoutputdir, f"{os.path.basename(__file__)[0:-3]}_points")                      # append this scripts filename + _points
+        if not os.path.isdir(szoutputdir)     : raise ValueError(f"invalid szoutputdir ({str(szrootoutputdir)})")      # outputdir must exist
+        #
+        # expect one (1) level of sub-directories for landuse: f"PV100LC_{landuseclass}"
+        #
+        for landuseEntry in os.scandir(szoutputdir):
+            if not landuseEntry.is_dir(): continue           # ignore non-dir entries here (e.g. logfiles)
+            #
+            # expect point-sub-directories here: f"Lon{szpointlon}_Lat{szpointlat}"
+            #
+            for pointEntry in os.scandir(landuseEntry):
+                if not pointEntry.is_dir(): continue         # ignore non-dir entries here (e.g. logfiles)
+                #
+                # q&d check and decode - expect LonXXXX.XXXXXXXX_LatXXXX.XXXXXXXX
+                #
+                if not len(pointEntry.name) == 33:      continue
+                if not pointEntry.name[ 0: 3] == 'Lon': continue  
+                if not pointEntry.name[17:20] == 'Lat': continue
+                try:
+                    pointlon = float(pointEntry.name[ 3:16])
+                    pointlat = float(pointEntry.name[20:33])
+                except:
+                    continue
+                #
+                # here you go
+                #
+                eepoint = ee.Geometry.Point(pointlon, pointlat)
+                if verbose: print(f"{os.path.basename(__file__)[0:-3]}: _oldrandompointsgenerator: yield Point({pointlon:013.8f}, {pointlat:013.8f}) at {pointEntry.path}")
+                yield eepoint
+    #
+    #
+    #    
+    _export_random_points(lstszproducts, szyyyyyear, szrootoutputdir, _oldrandompointsgenerator(szrootoutputdir, verbose), pulse=pulse, verbose=verbose)
+
+
+def _export_random_points(lstszproducts, szyyyyyear, szoutputdir, itreepoints, pulse=None, verbose=False):
+    """
     e.g.: TODO export_shape(["S2ndvi_he"], "exportimages", 2020, r"D:\data\ref\field_selection\test_fields_sample\2019_250testfields.shp", r"C:\tmp")
     """
     #
@@ -475,13 +560,12 @@ def export_random_points(lstszproducts, szyyyyyear, szoutputdir, pulse=None, ver
         #
         cPatch = 0
         iPatch = 0
-        while True:
+        for eepoint in itreepoints:
             #
             # assume global samples
             #
-            longitude = (1 - random.random())*360. - 180.
-            latitude  = random.uniform(-80,80)
-            eepoint   = ee.Geometry.Point(longitude, latitude)
+            longitude = eepoint.coordinates().get(0).getInfo()
+            latitude  = eepoint.coordinates().get(1).getInfo()
             #
             # assume landuse determined by about 1km x 1 km environment
             #
@@ -522,14 +606,21 @@ def export_random_points(lstszproducts, szyyyyyear, szoutputdir, pulse=None, ver
             #
             #
             logging.info(f"    point: (lon {szpointlon} lat {szpointlat} )")
+
             #
             #
             #
             exporter.exportimages(eepoint, eedatefrom, eedatetill, szfieldoutputdir, verbose=verbose)
-        
+
+    except Exception as e:
         #
         #
         #
+        logging.warning()
+        logging.warning(f"{os.path.basename(__file__)[0:-3]}  - unhandled exception: {str(e)}") 
+        logging.warning()
+        raise
+
     finally:
         #
         #    remove handler we added at function start
@@ -546,8 +637,10 @@ def demo_export_point():
     testproducts = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2scl", "S2sclconvmask", "S2tcirgb", "S2cloudlessmask",
                     "S1sigma0", "S1gamma0", "S1rvi",
                     "PV333ndvi", "PV333ndvi_he", "PV333sm", "PV333smsimplemask", "PV333rgb"]
+    testproducts = ["S2fapar"]
 
     testmethods  = ["exportimages", "exportimagestack", "exportimagestacktodrive"]
+    testmethods  = ["exportimages"]
 
     # #half31UESday    = ee.Date('2020-01-29')
     # szdatefrom   = '2020-01-29'
@@ -558,12 +651,14 @@ def demo_export_point():
     # pointlat     = 50.83872
 
     #fleecycloudsday = ee.Date('2018-07-12')
-    szdatefrom   = '2018-07-12'
-    szdatetill   = '2018-07-13'
+    szdatefrom   = '2019-01-01'
+    szdatetill   = '2020-01-01'
 
+    szdatefrom   = '2019-01-05'
+    szdatetill   = '2019-02-01'
     #bobspoint       = ee.Geometry.Point(4.90782, 51.20069)
-    pointlon     = 4.90782
-    pointlat     = 51.20069
+    pointlon     = 69.05843780
+    pointlat     = 39.87975752
     
     szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
 
@@ -617,7 +712,7 @@ def demo_export_random_points():
     #
     testproducts = ["S2ndvi", "S2fapar", "S2sclconvmask",  "S1sigma0"]
     testproducts = ["s2sclstaticsmask"]
-    szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/s2sclstaticsmask_(8 9 10)_2sigma" if IAMRUNNINGONTHEMEP else r"C:\tmp"
+    szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/s2sclstaticsmask_(3 8 9 10)" if IAMRUNNINGONTHEMEP else r"C:\tmp"
     szyyyyyear   = 2019    
     verbose      = False    
     #
@@ -625,15 +720,35 @@ def demo_export_random_points():
     #
     pulse = geeutils.Pulse()
     geeutils.wrapasprocess(
-        export_random_points, 
+        export_random_points,
         args=(testproducts, szyyyyyear, szoutrootdir), 
         kwargs={'pulse':pulse, 'verbose':verbose}, 
         timeout=3*60*60, attempts=None, pulse=pulse) # exportimages and getcollection both have a wrapretry with 127 minutes backoff total
 
 """
 """
+def demo_export_existing_points():
+    #
+    #
+    #
+    testproducts = ["s2sclclassfractions"]
+    szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/s2sclstaticsmask_(3 8 9 10)" if IAMRUNNINGONTHEMEP else r"C:\tmp"
+    szyyyyyear   = 2019    
+    verbose      = False 
+    #
+    #
+    #
+    pulse = geeutils.Pulse()
+    geeutils.wrapasprocess(
+        export_existing_points,
+        args=(testproducts, szyyyyyear, szoutrootdir), 
+        kwargs={'pulse':pulse, 'verbose':verbose}, 
+        timeout=3*60*60, attempts=1, pulse=pulse) # no retries here! just checking for deadlocks
+"""
+"""
 def main():
-    demo_export_random_points()
+    demo_export_existing_points()
+    #demo_export_random_points()
     #demo_export_point()
     #demo_export_shape()
     
