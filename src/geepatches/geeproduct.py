@@ -701,6 +701,94 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
 
 """
 """
+class GEECol_s2sclcombimask(GEECol_s2scl):
+    """
+    """
+    def __init__(self, 
+                 conv_lsts2sclclassesarray=None, conv_lstwindowsizeinmeters=None, conv_lstthreshold=None,
+                 stat_s2sclclassesarray=None, stat_threshold=None, stat_thresholdunits=None, stat_statisticsareametersradius=None, stat_idaysbackward=None):
+        """
+        """
+        #
+        #
+        #
+        if conv_lsts2sclclassesarray       is None: conv_lsts2sclclassesarray       = [[2, 4, 5, 6, 7], [3, 8, 9, 10, 11]]
+        if conv_lstwindowsizeinmeters      is None: conv_lstwindowsizeinmeters      = [20*9, 20*101]
+        if conv_lstthreshold               is None: conv_lstthreshold               = [-0.057, 0.025] #[-0.057, 0.015]
+ 
+        self.conv_maskmaker = geemask.ConvMask(conv_lsts2sclclassesarray, conv_lstwindowsizeinmeters, conv_lstthreshold)
+        #
+        #
+        #
+        self.stat_s2sclclassesarray          = [3, 8, 9, 10, 11] if stat_s2sclclassesarray          is None else stat_s2sclclassesarray
+        self.stat_threshold                  = 2                 if stat_threshold                  is None else stat_threshold
+        self.stat_thresholdunits             = "sigma"           if stat_thresholdunits             is None else "sigma"
+        self.stat_statisticsareametersradius = 25000             if stat_statisticsareametersradius is None else  stat_statisticsareametersradius
+        self.stat_idaysbackward              = 365               if stat_idaysbackward              is None else stat_idaysbackward
+        
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        #
+        #
+        #
+        if verbose: print(f"{str(type(self).__name__)}.collect")
+        #
+        #    obtain staticsmask used as ignoremaskimage in ConvMask.makemask
+        #
+        if self.stat_idaysbackward <= 0:
+            staticsmask        = None
+            eesclimgcollection = super().collect(eeroi, eedatefrom, eedatetill, verbose=verbose)
+
+        else:
+            if self.stat_thresholdunits != "percentage": eestatisticsregion = geeutils.squareareaboundsroi(eeroi.centroid(maxError=0.001), self.stat_statisticsareametersradius)
+            else:                                        eestatisticsregion = None
+
+            eesclimgcollection = super().collect(eeroi, eedatefrom.advance(-1*self.stat_idaysbackward, 'day'), eedatetill, verbose=verbose)
+            staticsmask        = ee.Image(geemask.StaticsMask(
+                self.stat_s2sclclassesarray, 
+                None, 
+                self.stat_threshold, 
+                self.stat_thresholdunits, 
+                eestatisticsregion, 
+                verbose=verbose)
+                .makemask(eesclimgcollection))
+            eesclimgcollection = eesclimgcollection.filter(ee.Filter.date(eedatefrom, eedatetill))
+        #
+        #
+        #
+        def mask(image):
+            return (self.conv_maskmaker.makemask(image, staticsmask)
+                    .toUint8()           # uint8 [0:not masked, 1:masked]  (obsolete ?)
+                    .rename('MASK')
+                    .copyProperties(image, ['system:time_start', 'gee_date']))
+        
+        eeimagecollection = eesclimgcollection.map(mask)
+        #
+        #    add collection properties describing this collection (in this case: overwrites 'gee_description' from GEECol_s2scl)
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 's2sclcombimask')
+        #
+        #
+        #
+        return eeimagecollection            
+
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        'S2 half tiles' (e.g. 31UES on '2020-01-29') have limited their footprint to the area 
+        where data lives, thus *NOT* the full 31UES footprint
+        when exporting masks [0,1] for these images, we'll indicate the unknown area with 255 as no data
+        
+          0: not masked (clear sky)
+          1: masked     (belgian sky)
+        255: no data    (belgian politics)
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .unmask(255, False)    # no data to 255
+                                                                 .toUint8()))           # actually obsolete here
+        return eeimagecollection
+
+
+"""
+"""
 class GEECol_s2sclclassfractions(GEECol_s2scl):
 
     def __init__(self, s2sclclassesarray=None):
