@@ -589,7 +589,7 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
         # s2sclclassesarray
         #
         if s2sclclassesarray is None: 
-            self.s2sclclassesarray = [3,8,9,10]                               # default: in clouds we trust
+            self.s2sclclassesarray = [3,8,9,10,11]                            # default: in clouds we trust, ... and snow?
         else:
             if not isinstance(s2sclclassesarray, list)                        : raise ValueError("s2sclclassesarray expected to be a list")
             for number in s2sclclassesarray:
@@ -674,7 +674,7 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
         #
         #    make (single image) collection and add properties describing this collection
         #       
-        szdescription = "s2sclstaticsmask(" + str(self.threshold) + self.thresholdunits + ")"
+        szdescription = "S2sclstaticsmask(" + str(self.threshold) + self.thresholdunits + ")"
         eeimagecollection = ee.ImageCollection(staticsmask).set('gee_description', szdescription)
         #
         #
@@ -703,6 +703,7 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
 """
 class GEECol_s2sclcombimask(GEECol_s2scl):
     """
+    convmask using staticsmask as ignoremaskimage to exclude 'abnormal' pixels from convolutions
     """
     def __init__(self, 
                  conv_lsts2sclclassesarray=None, conv_lstwindowsizeinmeters=None, conv_lstthreshold=None,
@@ -765,7 +766,7 @@ class GEECol_s2sclcombimask(GEECol_s2scl):
         #
         #    add collection properties describing this collection (in this case: overwrites 'gee_description' from GEECol_s2scl)
         #       
-        eeimagecollection = eeimagecollection.set('gee_description', 's2sclcombimask')
+        eeimagecollection = eeimagecollection.set('gee_description', 'S2sclcombimask')
         #
         #
         #
@@ -800,7 +801,7 @@ class GEECol_s2sclclassfractions(GEECol_s2scl):
         # s2sclclassesarray
         #
         if s2sclclassesarray is None: 
-            self.s2sclclassesarray = [3,8,9,10]                               # default: in clouds we trust
+            self.s2sclclassesarray = [3,8,9,10,11]                            # default: in clouds we trust, ... and snow?
         else:
             if not isinstance(s2sclclassesarray, list)                        : raise ValueError("s2sclclassesarray expected to be a list")
             for number in s2sclclassesarray:
@@ -826,7 +827,7 @@ class GEECol_s2sclclassfractions(GEECol_s2scl):
         #
         #    make (single image) collection and add properties describing this collection
         #       
-        eeimagecollection = ee.ImageCollection(fractions).set('gee_description', "s2sclclassfractions")
+        eeimagecollection = ee.ImageCollection(fractions).set('gee_description', "S2sclclassfractions")
         #
         #
         #

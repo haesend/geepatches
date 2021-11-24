@@ -22,7 +22,8 @@ IAMRUNNINGONTHEMEP = False
 #    available products
 #
 EXPORTABLEPRODUCTS = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2tcirgb",
-                      "S2scl", "S2sclconvmask", "S2cloudlessmask", "s2sclstaticsmask", "s2sclclassfractions",
+                      "S2scl", "S2sclconvmask", "S2sclcombimask", "S2sclstaticsmask", "S2sclclassfractions",
+                      "S2cloudlessmask",
                       "S1sigma0", "S1gamma0", "S1rvi",
                       "PV333ndvi", "PV333ndvi_he", "PV333sm", "PV333smsimplemask", "PV333rgb"]
 #
@@ -103,15 +104,17 @@ class GEEExporter():
         if "S2fapar_he"          in self.szproducts: yield geeproduct.GEECol_s2fapar_he().getcollection(         eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
         if "S2scl"               in self.szproducts: yield geeproduct.GEECol_s2scl().getcollection(              eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
         if "S2sclconvmask"       in self.szproducts: yield geeproduct.GEECol_s2sclconvmask().getcollection(      eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
-        if "S2tcirgb"            in self.szproducts: yield geeproduct.GEECol_s2rgb().getcollection(              eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S2cloudlessmask"     in self.szproducts: yield geeproduct.GEECol_s2cloudlessmask().getcollection(    eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
-#        if "s2sclstaticsmask"  in self.szproducts: yield geeproduct.GEECol_s2sclstaticsmask().getcollection(   eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
-        if "s2sclstaticsmask"    in self.szproducts: 
+        if "S2sclcombimask"      in self.szproducts: yield geeproduct.GEECol_s2sclcombimask().getcollection(     eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+#        if "S2sclstaticsmask"  in self.szproducts: yield geeproduct.GEECol_s2sclstaticsmask().getcollection(   eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2sclstaticsmask"    in self.szproducts: 
             yield geeproduct.GEECol_s2sclstaticsmask(threshold=98,   thresholdunits="percentile").getcollection(   eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
-        if "s2sclstaticsmask"    in self.szproducts: 
+        if "S2sclstaticsmask"    in self.szproducts: 
             yield geeproduct.GEECol_s2sclstaticsmask(threshold=2.0,  thresholdunits="sigma").getcollection(   eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
-        if "s2sclclassfractions" in self.szproducts: yield geeproduct.GEECol_s2sclclassfractions().getcollection(    eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
- 
+        if "S2sclclassfractions" in self.szproducts: yield geeproduct.GEECol_s2sclclassfractions().getcollection(    eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+        if "S2cloudlessmask"     in self.szproducts: yield geeproduct.GEECol_s2cloudlessmask().getcollection(    eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
+
+        if "S2tcirgb"            in self.szproducts: yield geeproduct.GEECol_s2rgb().getcollection(              eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
+
         if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
         if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
         if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
@@ -436,7 +439,7 @@ def export_random_points(lstszproducts, szyyyyyear, szoutputdir, pulse=None, ver
     #
     #    
     #
-    _export_random_points(lstszproducts, szyyyyyear, szoutputdir, _newrandompointsgenerator(10, verbose), pulse=pulse, verbose=verbose)
+    _export_random_points(lstszproducts, szyyyyyear, szoutputdir, _newrandompointsgenerator(count=None, verbose=verbose), pulse=pulse, verbose=verbose)
 
 
 def export_existing_points(lstszproducts, szyyyyyear, szrootoutputdir, pulse=None, verbose=False):
@@ -605,7 +608,7 @@ def _export_random_points(lstszproducts, szyyyyyear, szoutputdir, itreepoints, p
             #
             #
             #
-            logging.info(f"    point: (lon {szpointlon} lat {szpointlat} )")
+            logging.info(f"    point: ( lon {szpointlon} lat {szpointlat} ) class( {landuseclass:3d} )")
 
             #
             #
@@ -711,8 +714,12 @@ def demo_export_random_points():
     #
     #
     testproducts = ["S2ndvi", "S2fapar", "S2sclconvmask",  "S1sigma0"]
-    testproducts = ["s2sclstaticsmask"]
-    szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/s2sclstaticsmask_(3 8 9 10)" if IAMRUNNINGONTHEMEP else r"C:\tmp"
+    testproducts = ["s2sclstaticsmask", "s2sclclassfractions"]
+    testproducts = ["S2fapar", "S2sclcombimask", "S2sclconvmask", "S2sclstaticsmask"]
+#    szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/gee/s2sclstaticsmask_(3 8 9 10)" if IAMRUNNINGONTHEMEP else r"C:\tmp"
+    szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/gee/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
+    
+    
     szyyyyyear   = 2019    
     verbose      = False    
     #
@@ -731,7 +738,7 @@ def demo_export_existing_points():
     #
     #
     #
-    testproducts = ["s2sclclassfractions"]
+    testproducts = ["S2sclclassfractions"]
     szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/s2sclstaticsmask_(3 8 9 10)" if IAMRUNNINGONTHEMEP else r"C:\tmp"
     szyyyyyear   = 2019    
     verbose      = False 
@@ -747,8 +754,8 @@ def demo_export_existing_points():
 """
 """
 def main():
-    demo_export_existing_points()
-    #demo_export_random_points()
+    #demo_export_existing_points()
+    demo_export_random_points()
     #demo_export_point()
     #demo_export_shape()
     
