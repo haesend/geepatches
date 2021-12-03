@@ -60,10 +60,10 @@ class SimpleMask:
     def __init__(self, s2sclclassesarray, binvert=False):
         """
         :param s2sclclassesarray: list (python list, NOT ee.List) of class values to be masked
-        :param binvert: invert the mask (optional, default Fals)
+        :param binvert: invert the mask (optional, default False)
         """
         _assertlistofnumber(s2sclclassesarray)
-        self.ees2sclclasseslist = ee.List(s2sclclassesarray)
+        self.ees2sclclasseslist = ee.List(s2sclclassesarray).distinct()
         self.binvert = binvert
  
     def makemask(self, s2sclimage, ignoremaskimage=None):
@@ -82,6 +82,109 @@ class SimpleMask:
                     .set('system:time_start', s2sclimage.get('system:time_start'))
                     .set('system:footprint',  s2sclimage.get('system:footprint'))
                     .rename('SimpleMask'))
+
+
+"""
+/**
+ * SimpleFilter: select a subset of an imagecollection ("filter" the collection) which contains some classification band, 
+ *               by applying a threshold value on the coverage by a specified set of values ('classes') in this band, over
+ *               a specified region of the images.
+ *               positive thresholds will be interpreted as "allowed minimum" - hence images are kept only if coverage => threshold
+ *               negative thresholds will be interpreted as "allowed maximum" - hence images are kept only if coverage <= threshold
+ *
+ * usage: cleans2imagecollection = SimpleFilter('SCL', [9, 10], -5).filtercollection(somes2imagecollection, regiontobeconsidered)
+ *
+ * e.g.
+ *   classification  values    coverage                                          threshold: result
+ *      1 1 2 1 1                                 
+ *      1 3 3 3 1    [2,3]     5/15 = 33%    -40%: kept(33<40)   -30%: dropped(33>30)   30%: kept(33>30)   40%: dropped(33<40)
+ *      1 1 2 1 4                                
+ * 
+ * 
+ */
+"""
+class SimpleFilter:
+    """
+    """
+    def __init__(self, szclassesband, classesarray, thresholdpct):
+        """
+        :param szclassesband: the classification band to be considered in the images of the input collection
+        :param classesarray: list (python list, NOT ee.List) of the class values to be evaluated
+        :param thresholdpct: the minimum (positive thresholds) or maximum (negative thresholds) percentage coverage by these classes ( [0..100] )
+        """
+        if not szclassesband                            : raise ValueError("no band specified")
+        _assertlistofnumber(classesarray)
+        if not isinstance(thresholdpct, numbers.Number) : raise ValueError("invalid threshold")
+        if not (0 <= abs(thresholdpct) <= 100)          : raise ValueError("invalid threshold value. must be [0..100]")
+        self.szband        = szclassesband
+        self.eeclasseslist = ee.List(classesarray).distinct()
+        self.eethreshold   = ee.Number(thresholdpct).abs();
+        self.binvert       = True if (thresholdpct < 0) else False;
+
+    def filtercollection(self, eeimagecollection, eeregion):
+        """
+        """
+
+        def _tagselclspct(eeimage, previouslist):
+            """
+            iterator function adding the coverage by the specified classes as property to the image
+            remark: mapping-attempts (iso iterator) often result in "EEException: Too many concurrent aggregations."
+            """
+            
+            #
+            # select specified (classification) band in the image 
+            #
+            eeallclsimage = eeimage.select(self.szband)
+
+            #
+            # create (boolean) image of pixels of all specified classes
+            #
+            def _maskselcls(selclass):
+                #
+                # create (boolean) image of pixels of specified class
+                #
+                return eeallclsimage.eq(ee.Number(selclass))
+            eeselclsimage = (ee.ImageCollection(self.eeclasseslist.map(_maskselcls))
+                             .reduce(ee.Reducer.sum())
+                             .setDefaultProjection(eeallclsimage.projection()))
+            # debug @ client side
+            # eeselclsimage = ee.Image(0)
+            # for iIdx in range(self.eeclasseslist.size().getInfo()):
+            #     selclass = self.eeclasseslist.get(iIdx)
+            #     eeselclsimage = _maskselcls(selclass).Or(eeselclsimage)
+            
+            #
+            # calculate (reduceRegion) the number of all pixels and of the pixels in the specified classes over the specified region
+            #
+            eeallclscnt = ee.Number(eeallclsimage.reduceRegion(ee.Reducer.count(), eeregion).values().get(0))
+            eeselclscnt = ee.Number(eeselclsimage.reduceRegion(ee.Reducer.sum(),   eeregion).values().get(0))
+            eeselclspct = eeselclscnt.multiply(100).divide(eeallclscnt)
+            #
+            # set the results as properties of the image, and add the image to the intermediate list
+            #
+            return ee.List(previouslist).add(eeimage.set('eeallclscnt', eeallclscnt, 
+                                                        'eeselclscnt', eeselclscnt, 
+                                                        'eeselclspct', eeselclspct))
+        #
+        # calculate coverage of specfied classes for each image in the input collection
+        #
+        taggedimagescoll = ee.ImageCollection.fromImages(eeimagecollection.iterate(_tagselclspct, ee.List([])))
+        # debug @ client side
+        # taggedimageslist = ee.List([])
+        # for iIdx in range(eeimagecollection.size().getInfo()):
+        #     img = ee.Image(eeimagecollection.toList(eeimagecollection.size()).get(iIdx))
+        #     taggedimageslist = _tagselclspct(img, taggedimageslist)
+        # taggedimagescoll = ee.ImageCollection.fromImages(taggedimageslist)
+        
+        #
+        # apply threshold and return remaining images
+        #
+        if self.binvert:
+            # negative threshold was specified => considered as maximum coverage
+            return taggedimagescoll.filter(ee.Filter.lte('eeselclspct', self.eethreshold))     
+        else:
+            # positive threshold was specified => considered as minimum coverage
+            return taggedimagescoll.filter(ee.Filter.gte('eeselclspct', self.eethreshold))  
 
 
 """"  
