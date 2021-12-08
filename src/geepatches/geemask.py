@@ -28,6 +28,15 @@ def _assertexclusive(somelist, otherlist):
     except: raise ValueError("not a list")
     
 
+"""
+interface definition for ImageCollection filters
+"""
+class IColFilter():
+    def filtercollection(self, eeimagecollection, eeregion=None, verbose=False):
+        """
+        """
+        raise NotImplementedError("Subclasses should implement this!")
+
 
 """
 /**
@@ -89,8 +98,9 @@ class SimpleMask:
  * SimpleFilter: select a subset of an imagecollection ("filter" the collection) which contains some classification band, 
  *               by applying a threshold value on the coverage by a specified set of values ('classes') in this band, over
  *               a specified region of the images.
- *               positive thresholds will be interpreted as "allowed minimum" - hence images are kept only if coverage => threshold
- *               negative thresholds will be interpreted as "allowed maximum" - hence images are kept only if coverage <= threshold
+ *               positive thresholds will be interpreted as "required minimum" - hence images are kept only if coverage => threshold
+ *               negative thresholds will be interpreted as "allowed maximum"  - hence images are kept only if coverage <= threshold
+ *               BEWARE: threshold '0' will be interpreted  as negative !
  *
  * usage: cleans2imagecollection = SimpleFilter('SCL', [9, 10], -5).filtercollection(somes2imagecollection, regiontobeconsidered)
  *
@@ -103,7 +113,7 @@ class SimpleMask:
  * 
  */
 """
-class SimpleFilter:
+class SimpleFilter(IColFilter):
     """
     """
     def __init__(self, szclassesband, classesarray, thresholdpct):
@@ -119,9 +129,9 @@ class SimpleFilter:
         self.szband        = szclassesband
         self.eeclasseslist = ee.List(classesarray).distinct()
         self.eethreshold   = ee.Number(thresholdpct).abs();
-        self.binvert       = True if (thresholdpct < 0) else False;
+        self.binvert       = True if (thresholdpct <= 0) else False; # 0 considered negative; indicating NO coverage by specified classes allowed
 
-    def filtercollection(self, eeimagecollection, eeregion):
+    def filtercollection(self, eeimagecollection, eeregion, verbose=False):
         """
         """
 
@@ -156,25 +166,36 @@ class SimpleFilter:
             #
             # calculate (reduceRegion) the number of all pixels and of the pixels in the specified classes over the specified region
             #
-            eeallclscnt = ee.Number(eeallclsimage.reduceRegion(ee.Reducer.count(), eeregion).values().get(0))
-            eeselclscnt = ee.Number(eeselclsimage.reduceRegion(ee.Reducer.sum(),   eeregion).values().get(0))
-            eeselclspct = eeselclscnt.multiply(100).divide(eeallclscnt)
+            eeallclscnt = ee.Number(eeallclsimage.reduceRegion(ee.Reducer.count().unweighted(), eeregion).values().get(0))
+            eeselclscnt = ee.Number(eeselclsimage.reduceRegion(ee.Reducer.sum().unweighted(),   eeregion).values().get(0))
+            eeselclspct = eeselclscnt.divide(eeallclscnt).multiply(100)
             #
             # set the results as properties of the image, and add the image to the intermediate list
             #
             return ee.List(previouslist).add(eeimage.set('eeallclscnt', eeallclscnt, 
-                                                        'eeselclscnt', eeselclscnt, 
-                                                        'eeselclspct', eeselclspct))
+                                                         'eeselclscnt', eeselclscnt, 
+                                                         'eeselclspct', eeselclspct))
         #
         # calculate coverage of specfied classes for each image in the input collection
         #
-        taggedimagescoll = ee.ImageCollection.fromImages(eeimagecollection.iterate(_tagselclspct, ee.List([])))
-        # debug @ client side
-        # taggedimageslist = ee.List([])
-        # for iIdx in range(eeimagecollection.size().getInfo()):
-        #     img = ee.Image(eeimagecollection.toList(eeimagecollection.size()).get(iIdx))
-        #     taggedimageslist = _tagselclspct(img, taggedimageslist)
-        # taggedimagescoll = ee.ImageCollection.fromImages(taggedimageslist)
+        if False:
+            #
+            # debug @ client side
+            #
+            taggedimageslist = ee.List([])
+            for iIdx in range(eeimagecollection.size().getInfo()):
+                img = ee.Image(eeimagecollection.toList(eeimagecollection.size()).get(iIdx))
+                taggedimageslist = _tagselclspct(img, taggedimageslist)
+                if verbose:
+                    img = ee.Image(taggedimageslist.get(-1))
+                    print(f"{str(type(self).__name__)}.filtercollection: img({ee.Date(img.date()).format('YYYY-MM-dd').getInfo()})",
+                          f" - all pix: {int(ee.Number(img.get('eeallclscnt')).round().getInfo()):6d}", 
+                          f" - sel pix: {int(ee.Number(img.get('eeselclscnt')).round().getInfo()):6d}",
+                          f" - sel pct: {float(ee.Number(img.get('eeselclspct')).multiply(100).round().divide(100).getInfo()):6.2f}%")
+
+            taggedimagescoll = ee.ImageCollection.fromImages(taggedimageslist)
+        else:
+            taggedimagescoll = ee.ImageCollection.fromImages(eeimagecollection.iterate(_tagselclspct, ee.List([])))
         
         #
         # apply threshold and return remaining images
