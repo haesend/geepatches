@@ -88,6 +88,12 @@ class OrdinalProjectable(IProjectable):
         return eeimagecollection
 
 
+###############################################################################
+#
+# products
+#
+###############################################################################
+
 """
 """
 class GEECol(object):
@@ -318,10 +324,46 @@ class GEECol(object):
         return _eedstimagecollection
 
 
+###############################################################################
+#
+# Sentinel 2 related products
+#
+###############################################################################
+
+"""
+"""
+class S2sclcppfilter(geemask.IColFilter):
+    """
+    simple filter for sentinel 2 collections, based on scene classification.
+    default settings emulate some 'cloudy pixel percentage' filter: maximum 95% pixels have SCL class 8,9 or 10
+    typical use in the collect method of sentinel 2  products (GEECol daughter classes)
+    """
+    def __init__(self, s2sclclassesarray=[8,9,10], thresholdpct=-95):
+        """
+        :param s2sclclassesarray: list (python list, NOT ee.List) of the SCL class values to be evaluated
+        :param thresholdpct: the minimum (positive thresholds) or maximum (negative thresholds) percentage coverage by these classes ( [0..100] )
+        """
+        self.filter = geemask.SimpleFilter('SCL', s2sclclassesarray, thresholdpct)
+
+    def filtercollection(self, eeimagecollection, eeregion, verbose=False):
+        """
+        :param eeimagecollection: sentinel 2 ee.ImageCollection to be filtered (MUST CONTAIN SCL BAND)
+        :param eeregion: region to be evaluated by the filter (would be nice if the eeimagecollection actually covers this region...)
+        """
+        if verbose: print(f"{str(type(self).__name__)}.filtercollection: input collection: {geeutils.szimagecollectioninfo(eeimagecollection)}")
+        eeimagecollection = self.filter.filtercollection(eeimagecollection, eeregion, verbose=verbose)
+        if verbose: print(f"{str(type(self).__name__)}.filtercollection: resulting collection: {geeutils.szimagecollectioninfo(eeimagecollection)}")
+        return eeimagecollection
+
+
 """
 """
 class GEECol_s2ndvi(GEECol, OrdinalProjectable):
 
+    def __init__(self, colfilter=None):
+        self.colfilter=colfilter
+        if (colfilter is not None) and (not isinstance(colfilter, geemask.IColFilter) ) : raise ValueError("filter expected to be an IColFilter")
+        
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         """
         """
@@ -329,9 +371,14 @@ class GEECol_s2ndvi(GEECol, OrdinalProjectable):
         #    base collection
         #
         eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
-                             .select(['B4', 'B8'])                               # B4~Red B8~Nir
+                             .select(['B4', 'B8', 'SCL'])                               # B4~Red B8~Nir - SCL to allow SCL-based filters
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #    (optional) filtering
+        #
+        if self.colfilter is not None:
+            eeimagecollection = self.colfilter.filtercollection(eeimagecollection, eeroi, verbose=verbose)
         #
         #    apply ndvi = (nir-red)/(nir+red)
         #
@@ -369,6 +416,9 @@ GEECol_s2ndvi with historical vito ndvi scaling
 """
 class GEECol_s2ndvi_he(GEECol_s2ndvi):
 
+    def __init__(self, colfilter=None):
+        super().__init__(colfilter)
+
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         """
         """
@@ -393,6 +443,10 @@ class GEECol_s2ndvi_he(GEECol_s2ndvi):
 """
 class GEECol_s2fapar(GEECol, OrdinalProjectable):
 
+    def __init__(self, colfilter=None):
+        self.colfilter=colfilter
+        if (colfilter is not None) and (not isinstance(colfilter, geemask.IColFilter) ) : raise ValueError("filter expected to be an IColFilter")
+
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         """
         """
@@ -407,10 +461,15 @@ class GEECol_s2fapar(GEECol, OrdinalProjectable):
         #            hence the additional "notNull" filter
         #
         eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
-                             .select(['B3', 'B4', 'B8'])
+                             .select(['B3', 'B4', 'B8', 'SCL'])
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill))
                              .filter(ee.Filter.notNull(['MEAN_INCIDENCE_ZENITH_ANGLE_B8', 'MEAN_SOLAR_ZENITH_ANGLE', 'MEAN_SOLAR_AZIMUTH_ANGLE', 'MEAN_INCIDENCE_AZIMUTH_ANGLE_B8'])))
+        #
+        #    (optional) filtering
+        #
+        if self.colfilter is not None:
+            eeimagecollection = self.colfilter.filtercollection(eeimagecollection, eeroi, verbose=verbose)
         #
         #    apply fapar network
         #
@@ -448,6 +507,9 @@ GEECol_s2fapar with historical vito fapar scaling
 """
 class GEECol_s2fapar_he(GEECol_s2fapar):
 
+    def __init__(self, colfilter=None):
+        super().__init__(colfilter)
+
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         """
         """
@@ -472,6 +534,10 @@ class GEECol_s2fapar_he(GEECol_s2fapar):
 """
 class GEECol_s2scl(GEECol, CategoricalProjectable):
 
+    def __init__(self, colfilter=None):
+        self.colfilter=colfilter
+        if (colfilter is not None) and (not isinstance(colfilter, geemask.IColFilter) ) : raise ValueError("filter expected to be an IColFilter")
+
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         """
         """
@@ -482,6 +548,11 @@ class GEECol_s2scl(GEECol, CategoricalProjectable):
                              .select(['SCL'])
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #    (optional) filtering
+        #
+        if self.colfilter is not None:
+            eeimagecollection = self.colfilter.filtercollection(eeimagecollection, eeroi, verbose=verbose)
         #
         #    apply mode composite in case of overlapping images on same day
         #
@@ -512,9 +583,11 @@ class GEECol_s2scl(GEECol, CategoricalProjectable):
 class GEECol_s2sclconvmask(GEECol_s2scl):
     """
     """
-    def __init__(self, lsts2sclclassesarray=None, lstwindowsizeinmeters=None, lstthreshold=None):
+    def __init__(self, lsts2sclclassesarray=None, lstwindowsizeinmeters=None, lstthreshold=None, colfilter=None):
         """
         """
+        super().__init__(colfilter)
+
         if lsts2sclclassesarray is None:
             lsts2sclclassesarray =  [[2, 4, 5, 6, 7], [3, 8, 9, 10, 11]]
         if lstwindowsizeinmeters is None:
@@ -585,6 +658,10 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
                  - actual area is square with radius statisticsareametersradius
                  - this area is assumed to be "large" with respect to the actual target region (in .collect)
         """
+        #
+        # super (GEECol_s2scl) WITHOUT filter
+        #
+        super().__init__(colfilter=None)
         #
         # s2sclclassesarray
         #
@@ -706,10 +783,18 @@ class GEECol_s2sclcombimask(GEECol_s2scl):
     convmask using staticsmask as ignoremaskimage to exclude 'abnormal' pixels from convolutions
     """
     def __init__(self, 
-                 conv_lsts2sclclassesarray=None, conv_lstwindowsizeinmeters=None, conv_lstthreshold=None,
+                 conv_lsts2sclclassesarray=None, conv_lstwindowsizeinmeters=None, conv_lstthreshold=None, colfilter=None,
                  stat_s2sclclassesarray=None, stat_threshold=None, stat_thresholdunits=None, stat_statisticsareametersradius=None, stat_idaysbackward=None):
         """
         """
+        #
+        # super (GEECol_s2scl) WITHOUT filter 
+        #    - filtering will be applied on the result (hence after ignoremaskimage has been calculated on the 'complete' collection)
+        #    - this does not give completely identical results as GEECol_s2sclconvmask, since now filter is applied AFTER mosaic
+        #
+        super().__init__(colfilter=None)
+        self.finalcolfilter=colfilter
+        if (self.finalcolfilter is not None) and (not isinstance(self.finalcolfilter, geemask.IColFilter) ) : raise ValueError("filter expected to be an IColFilter")
         #
         #
         #
@@ -754,6 +839,12 @@ class GEECol_s2sclcombimask(GEECol_s2scl):
                 .makemask(eesclimgcollection))
             eesclimgcollection = eesclimgcollection.filter(ee.Filter.date(eedatefrom, eedatetill))
         #
+        #    (optional) filtering - remark: staticsmask is calculated with complete (unfiltered) scl collection
+        #
+        if self.finalcolfilter is not None:
+            eesclimgcollection = self.finalcolfilter.filtercollection(eesclimgcollection, eeroi, verbose=verbose)
+
+        #
         #
         #
         def mask(image):
@@ -797,6 +888,10 @@ class GEECol_s2sclclassfractions(GEECol_s2scl):
         this class is only ment as an aid in evaluating the GEECol_s2sclstaticsmask parameters
         :param s2sclclassesarray: list of s2 scl classes
         """
+        #
+        # super (GEECol_s2scl) WITHOUT filter
+        #
+        super().__init__(colfilter=None)
         #
         # s2sclclassesarray
         #
@@ -888,6 +983,9 @@ class GEECol_s2rgb(GEECol, OrdinalProjectable):
         - a comment: spectacular effects on surface or clouds could lead to values higher than 1.0
         
     """
+    def __init__(self, colfilter=None):
+        self.colfilter=colfilter
+        if (colfilter is not None) and (not isinstance(colfilter, geemask.IColFilter) ) : raise ValueError("filter expected to be an IColFilter")
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
 
@@ -896,12 +994,21 @@ class GEECol_s2rgb(GEECol, OrdinalProjectable):
 #                              .filterBounds(eeroi)
 #                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
         #
-        #    using the mystic TCI bands
+        #    using the mystic TCI bands - including SCL to allow SCL based filter
         #       
         eeimagecollection = (ee.ImageCollection('COPERNICUS/S2_SR')
-                             .select(['TCI_R', 'TCI_G', 'TCI_B'])
+                             .select(['TCI_R', 'TCI_G', 'TCI_B', 'SCL'])
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #    (optional) filtering - typically -but not mandatory- using an SCL based filter
+        #
+        if self.colfilter is not None:
+            eeimagecollection = self.colfilter.filtercollection(eeimagecollection, eeroi, verbose=verbose)
+        #
+        #    drop SCL band which was only included to allow SCL based filter
+        #
+        eeimagecollection = eeimagecollection.select(['TCI_R', 'TCI_G', 'TCI_B'])
         #
         #    apply median composite in case of overlapping images on same day
         #    could be refined (e.g. select value with max ndvi) but worldcover 
@@ -1090,6 +1197,12 @@ class GEECol_s2cloudlessmask(GEECol, CategoricalProjectable):
         return eeimagecollection
 
 
+###############################################################################
+#
+# Sentinel 1 related products
+#
+###############################################################################
+
 """
 """
 class GEECol_s1sigma0(GEECol, UserProjectable):
@@ -1168,7 +1281,7 @@ class GEECol_s1sigma0(GEECol, UserProjectable):
 class GEECol_s1gamma0(GEECol_s1sigma0):
 
     def __init__(self, szband, szorbitpass):
-        super().__init__(szband, szorbitpass)        
+        super().__init__(szband, szorbitpass)
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
@@ -1275,6 +1388,43 @@ class GEECol_s1rvi(GEECol, OrdinalProjectable):
         return eeimagecollection
 
 
+###############################################################################
+#
+# Proba V related products
+#
+###############################################################################
+
+"""
+"""
+class PV333smfilter(geemask.IColFilter):
+    """
+    simple filter for ProbaV 333m collections, based on STATUS MASK band.
+    default settings filter: minimum 5% pixels have STATUS MASK values 112, 120, 240 or 248
+        0111 0000 : 112 Radiometric all but blue ok. sea.  clear sky.
+        0111 1000 : 120 Radiometric all but blue ok. land. clear sky.
+        1111 0000 : 240 Radiometric all ok.          sea.  clear sky. 
+        1111 1000 : 248 Radiometric all ok.          land. clear sky. 
+
+    typical use in the collect method of sentinel 2  products (GEECol daughter classes)
+    """
+    def __init__(self, classesarray=[112, 120, 240, 248], thresholdpct=5):
+        """
+        :param classesarray: list (python list, NOT ee.List) of the STATUS MASK values to be evaluated
+        :param thresholdpct: the minimum (positive thresholds) or maximum (negative thresholds) percentage coverage by these values ( [0..100] )
+        """
+        self.filter = geemask.SimpleFilter('SM', classesarray, thresholdpct)
+
+    def filtercollection(self, eeimagecollection, eeregion, verbose=False):
+        """
+        :param eeimagecollection: ProbaV 333m ee.ImageCollection to be filtered (MUST CONTAIN SM BAND)
+        :param eeregion: region to be evaluated by the filter (would be nice if the eeimagecollection actually covers this region...)
+        """
+        if verbose: print(f"{str(type(self).__name__)}.filtercollection: input collection: {geeutils.szimagecollectioninfo(eeimagecollection)}")
+        eeimagecollection = self.filter.filtercollection(eeimagecollection, eeregion, verbose=verbose)
+        if verbose: print(f"{str(type(self).__name__)}.filtercollection: resulting collection: {geeutils.szimagecollectioninfo(eeimagecollection)}")
+        return eeimagecollection
+
+
 """
 """
 class GEECol_pv333ndvi(GEECol, OrdinalProjectable):
@@ -1282,14 +1432,23 @@ class GEECol_pv333ndvi(GEECol, OrdinalProjectable):
     https://developers.google.com/earth-engine/datasets/catalog/VITO_PROBAV_C1_S1_TOC_333M
     """
 
+    def __init__(self, colfilter=None):
+        self.colfilter=colfilter
+        if (colfilter is not None) and (not isinstance(colfilter, geemask.IColFilter) ) : raise ValueError("filter expected to be an IColFilter")
+
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
         #    base collection
         #
         eeimagecollection = (ee.ImageCollection('VITO/PROBAV/C1/S1_TOC_333M')
-                             .select(['NIR', 'RED'])
+                             .select(['NIR', 'RED', 'SM'])                       # SM to allow STATUS MASK-based filters
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #    (optional) filtering
+        #
+        if self.colfilter is not None:
+            eeimagecollection = self.colfilter.filtercollection(eeimagecollection, eeroi, verbose=verbose)
         #
         #    apply ndvi = (nir-red)/(nir+red)
         #
@@ -1328,6 +1487,9 @@ class GEECol_pv333ndvi(GEECol, OrdinalProjectable):
 GEECol_pv333ndvi with historical vito ndvi scaling
 """
 class GEECol_pv333ndvi_he(GEECol_pv333ndvi):
+
+    def __init__(self, colfilter=None):
+        super().__init__(colfilter)
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         """
@@ -1368,6 +1530,10 @@ class GEECol_pv333sm(GEECol, CategoricalProjectable):
            
     """
 
+    def __init__(self, colfilter=None):
+        self.colfilter=colfilter
+        if (colfilter is not None) and (not isinstance(colfilter, geemask.IColFilter) ) : raise ValueError("filter expected to be an IColFilter")
+
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         """
         """
@@ -1378,6 +1544,11 @@ class GEECol_pv333sm(GEECol, CategoricalProjectable):
                              .select(['SM'])
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #    (optional) filtering
+        #
+        if self.colfilter is not None:
+            eeimagecollection = self.colfilter.filtercollection(eeimagecollection, eeroi, verbose=verbose)
         #
         #    no sense in mosaicing: S1_TOC_333M is global
         #    however: geeutils.mosaictodate adds the 'gee_date' property which is mandatory in a GEECol
@@ -1423,6 +1594,9 @@ class GEECol_pv333simplemask(GEECol_pv333sm):
         1111 1000 : 248 Radiometric all ok.          land. clear sky. 
            
     """
+
+    def __init__(self, colfilter=None):
+        super().__init__(colfilter)
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
@@ -1482,15 +1656,28 @@ class GEECol_pv333rgb(GEECol, OrdinalProjectable):
         
     """
 
+    def __init__(self, colfilter=None):
+        self.colfilter=colfilter
+        if (colfilter is not None) and (not isinstance(colfilter, geemask.IColFilter) ) : raise ValueError("filter expected to be an IColFilter")
+
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
 
         #
         #
         #       
         eeimagecollection = (ee.ImageCollection('VITO/PROBAV/C1/S1_TOC_333M')
-                             .select(['RED', 'NIR', 'BLUE'])
+                             .select(['RED', 'NIR', 'BLUE', 'SM'])                       # SM to allow STATUS MASK-based filters
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #    (optional) filtering - typically -but not mandatory- using an SCL based filter
+        #
+        if self.colfilter is not None:
+            eeimagecollection = self.colfilter.filtercollection(eeimagecollection, eeroi, verbose=verbose)
+        #
+        #    drop SM band which was only included to allow STATUS MASK based filter
+        #
+        eeimagecollection = eeimagecollection.select(['RED', 'NIR', 'BLUE'])
         #
         #    no sense in mosaicing: S1_TOC_333M is global
         #    however: geeutils.mosaictodate adds the 'gee_date' property which is mandatory in a GEECol
