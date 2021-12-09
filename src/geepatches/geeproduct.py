@@ -533,6 +533,22 @@ class GEECol_s2fapar_he(GEECol_s2fapar):
 """
 """
 class GEECol_s2scl(GEECol, CategoricalProjectable):
+    """
+    https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S2_SR
+    
+    Scene Classification Map (The "No Data" value of 0 is masked out)
+         1     ff0004     Saturated or defective
+         2     868686     Dark Area Pixels
+         3     774b0a     Cloud Shadows
+         4     10d22c     Vegetation
+         5     ffff52     Bare Soils
+         6     0000ff     Water
+         7     818181     Clouds Low Probability / Unclassified
+         8     c0c0c0     Clouds Medium Probability
+         9     f1f1f1     Clouds High Probability
+        10     bac5eb     Cirrus
+        11     52fff9     Snow / Ice
+    """
 
     def __init__(self, colfilter=None):
         self.colfilter=colfilter
@@ -574,6 +590,67 @@ class GEECol_s2scl(GEECol, CategoricalProjectable):
         """
         eeimagecollection = eeimagecollection.map(lambda image: (image
                                                                  .unmask(0, False)      # no data to 0 
+                                                                 .toUint8()))           # actually obsolete here
+        return eeimagecollection
+
+
+"""
+"""
+class GEECol_s2sclsimplemask(GEECol_s2scl):
+    """
+    """
+    def __init__(self, s2sclclassesarray=None, binvert=None, colfilter=None):
+        """
+        """
+        super().__init__(colfilter)
+
+        if s2sclclassesarray is None:
+            s2sclclassesarray =  [2, 4, 5, 6, 7] # assuming 2,4,5,6 en 7 to be 'valid' classification classes (unlike 'volatile' clouds, saturations, snow,...)
+        if binvert is None:
+            binvert = True
+        
+        self.maskmaker = geemask.SimpleMask(s2sclclassesarray, binvert)
+
+    def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
+        #
+        #    base collection: SCL from parent - already composited (daily) to avoid striping at overlaps
+        #
+        eeimagecollection = super().collect(eeroi, eedatefrom, eedatetill, verbose=verbose)
+        #
+        #
+        #
+        def simplemask(image):
+            return (self.maskmaker
+                    .makemask(image)
+                    .toUint8()           # uint8 [0:not masked, 1:masked]  (obsolete ?)
+                    .rename('MASK')
+                    .copyProperties(image, ['system:time_start', 'gee_date']))
+        eeimagecollection = eeimagecollection.map(simplemask)
+        #
+        #    no mosaic/composite - already done in base collection
+        #
+        pass
+        #
+        #    add collection properties describing this collection (in this case: overwrites 'gee_description' from GEECol_s2scl)
+        #       
+        eeimagecollection = eeimagecollection.set('gee_description', 'S2sclsimplemask')
+        #
+        #
+        #
+        return eeimagecollection
+
+    def scaleandflag(self, eeimagecollection, verbose=False):
+        """
+        'S2 half tiles' (e.g. 31UES on '2020-01-29') have limited their footprint to the area 
+        where data lives, thus *NOT* the full 31UES footprint
+        when exporting masks [0,1] for these images, we'll indicate the unknown area with 255 as no data
+        
+          0: not masked (clear sky)
+          1: masked     (belgian sky)
+        255: no data    (belgian politics)
+        """
+        eeimagecollection = eeimagecollection.map(lambda image: (image
+                                                                 .unmask(255, False)    # no data to 255
                                                                  .toUint8()))           # actually obsolete here
         return eeimagecollection
 
