@@ -341,7 +341,7 @@ class S2sclcppfilter(geemask.IColFilter):
     def __init__(self, s2sclclassesarray=[8,9,10], thresholdpct=-95):
         """
         :param s2sclclassesarray: list (python list, NOT ee.List) of the SCL class values to be evaluated
-        :param thresholdpct: the minimum (positive thresholds) or maximum (negative thresholds) percentage coverage by these classes ( [0..100] )
+        :param thresholdpct: the minimum (positive thresholds) or maximum (negative thresholds) percentage coverage by these classes ( [-100..100] )
         """
         self.filter = geemask.SimpleFilter('SCL', s2sclclassesarray, thresholdpct)
 
@@ -1114,6 +1114,8 @@ class GEECol_s2rgb(GEECol, OrdinalProjectable):
 """
 class GEECol_s2cloudlessmask(GEECol, CategoricalProjectable):
     """
+    experimental - just to compare to GEECol_s2sclconvmask and GEECol_s2sclcombimask
+    
     copy of the gee tutorial "Sentinel-2 Cloud Masking with s2cloudless"
 
     https://developers.google.com/earth-engine/tutorials/community/sentinel-2-s2cloudless
@@ -1130,7 +1132,7 @@ class GEECol_s2cloudlessmask(GEECol, CategoricalProjectable):
         - e.g. CLD_PRJ_DIST on 1 km is too little for half31UESpoint on geeutils.half31UESday; shadows are ignored.
         
     """
-    def __init__(self):
+    def __init__(self, colfilter=None):
         """
         configuration parameters:
         CLOUD_FILTER    (60)   integer    Maximum image cloud cover percent allowed in image collection
@@ -1144,6 +1146,14 @@ class GEECol_s2cloudlessmask(GEECol, CategoricalProjectable):
         self.NIR_DRK_THRESH = 0.15
         self.CLD_PRJ_DIST   = 5     #1
         self.BUFFER         = 100   #50
+
+        """
+        (optional) filtering - only applied on 'COPERNICUS/S2_SR' 
+                             - hence very specific; 
+                             - goal is to get same filtering as GEECol_s2sclconvmask and GEECol_s2sclcombimask
+        """
+        self.colfilter=colfilter
+        if (colfilter is not None) and (not isinstance(colfilter, geemask.IColFilter) ) : raise ValueError("filter expected to be an IColFilter")
     
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
@@ -1153,6 +1163,11 @@ class GEECol_s2cloudlessmask(GEECol, CategoricalProjectable):
                      .filterBounds(eeroi)
                      .filterDate(eedatefrom, eedatetill)
                      .filter(ee.Filter.lte('CLOUDY_PIXEL_PERCENTAGE', self.CLOUD_FILTER)))
+        #
+        #    (optional) filtering
+        #
+        if self.colfilter is not None:
+            s2_sr_col = self.colfilter.filtercollection(s2_sr_col, eeroi, verbose=verbose)
         #
         # Import and filter s2cloudless.
         #
