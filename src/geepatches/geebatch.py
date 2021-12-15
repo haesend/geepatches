@@ -87,7 +87,7 @@ class GEEExporter():
         #    using sentinel 2 20m as reference
         #
         refcol    = geeproduct.GEECol_s2scl()
-        refcolpix = 256 #64  #128 #64
+        refcolpix = 64  #128 #64
         #
         #    heuristics for other products
         #
@@ -418,9 +418,14 @@ demonstrator - including logging & furniture: export random points - only export
         200    000080    Oceans, seas. Can be either fresh or salt-water bodies.
 
 """
-def export_random_points(lstszproducts, szyyyyyear, szoutputdir, pulse=None, verbose=False):
+def export_random_points(lstszproducts, szyyyyyear, szdstrootdir, maxcount=None, pulse=None, verbose=False):
     """
     TODO: shouldn't we move our Landcover checks into this generator?
+          problem now is that actual results can be less than maxcount
+          problem with Landcover checks here, would be 
+          - that we do not have the resulting class to create the output directory,
+          - that the list of acceptable (or un-acceptable) classes should live here
+          tbc
     """
     def _newrandompointsgenerator(count=None, verbose=False):
         while True:
@@ -429,7 +434,7 @@ def export_random_points(lstszproducts, szyyyyyear, szoutputdir, pulse=None, ver
             #
             if count is not None:
                 count -= 1
-                if count <= 0: return 
+                if count < 0: return 
             #
             # assume global samples
             #
@@ -446,34 +451,34 @@ def export_random_points(lstszproducts, szyyyyyear, szoutputdir, pulse=None, ver
     #
     #    
     #
-    _export_random_points(lstszproducts, szyyyyyear, szoutputdir, _newrandompointsgenerator(count=None, verbose=verbose), pulse=pulse, verbose=verbose)
+    _export_random_points(lstszproducts, szyyyyyear, szdstrootdir, _newrandompointsgenerator(count=maxcount, verbose=verbose), pulse=pulse, verbose=verbose)
 
 
-def export_existing_points(lstszproducts, szyyyyyear, szrootoutputdir, pulse=None, verbose=False):
+def export_existing_points(lstszproducts, szyyyyyear, szsrcrootdir, szdstrootdir, pulse=None, verbose=False):
     """
     q&d solution to revisit existing 'random' points to add products
+    
     """
-    def _oldrandompointsgenerator(szrootoutputdir, verbose=False):
+    def _oldrandompointsgenerator(szsrcrootdir, verbose=False):
         verbose = True
         #
         # expect 'client' root directory
         #
-        if not os.path.isdir(szrootoutputdir) : raise ValueError(f"invalid szrootoutputdir ({str(szrootoutputdir)})")  # root must exist
-        #
-        # expect 'suite' directory in this root directory
-        #
-        szoutputdir = os.path.join(szrootoutputdir, f"{os.path.basename(__file__)[0:-3]}_points")                      # append this scripts filename + _points
-        if not os.path.isdir(szoutputdir)     : raise ValueError(f"invalid szoutputdir ({str(szrootoutputdir)})")      # outputdir must exist
+        if not os.path.isdir(szsrcrootdir) : raise ValueError(f"invalid source directory szsrcrootdir ({str(szsrcrootdir)})")      # root must exist
         #
         # expect one (1) level of sub-directories for landuse: f"PV100LC_{landuseclass}"
         #
-        for landuseEntry in os.scandir(szoutputdir):
-            if not landuseEntry.is_dir(): continue           # ignore non-dir entries here (e.g. logfiles)
+        for landuseEntry in os.scandir(szsrcrootdir):
+            if not landuseEntry.is_dir(): continue                      # ignore non-dir entries here (e.g. logfiles)
+            #
+            # q&d check and decode - expect PV100LC_xx
+            #
+            if not landuseEntry.name.startswith("PV100LC_"): continue   # ignore non-PV100_... landuse coded directories 
             #
             # expect point-sub-directories here: f"Lon{szpointlon}_Lat{szpointlat}"
             #
             for pointEntry in os.scandir(landuseEntry):
-                if not pointEntry.is_dir(): continue         # ignore non-dir entries here (e.g. logfiles)
+                if not pointEntry.is_dir(): continue                    # ignore non-dir entries here (e.g. logfiles)
                 #
                 # q&d check and decode - expect LonXXXX.XXXXXXXX_LatXXXX.XXXXXXXX
                 #
@@ -494,7 +499,7 @@ def export_existing_points(lstszproducts, szyyyyyear, szrootoutputdir, pulse=Non
     #
     #
     #    
-    _export_random_points(lstszproducts, szyyyyyear, szrootoutputdir, _oldrandompointsgenerator(szrootoutputdir, verbose), pulse=pulse, verbose=verbose)
+    _export_random_points(lstszproducts, szyyyyyear, szdstrootdir, _oldrandompointsgenerator(szsrcrootdir, verbose), pulse=pulse, verbose=verbose)
 
 
 def _export_random_points(lstszproducts, szyyyyyear, szoutputdir, itreepoints, pulse=None, verbose=False):
@@ -513,11 +518,6 @@ def _export_random_points(lstszproducts, szyyyyyear, szoutputdir, itreepoints, p
     #    check output directory on system - at least log files will live here - e.g: C:\tmp\
     #
     if not os.path.isdir(szoutputdir) : raise ValueError(f"invalid szoutputdir ({str(szoutputdir)})")  # root must exist
-    szoutputdir = os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3]}_points")              # append this scripts filename + _points
-    if not os.path.isdir(szoutputdir) : 
-        os.mkdir(szoutputdir)
-        if not os.path.isdir(szoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
-        os.chmod(szoutputdir, 0o777)
     #
     #    check products and methods
     #
@@ -530,14 +530,15 @@ def _export_random_points(lstszproducts, szyyyyyear, szoutputdir, itreepoints, p
     szyyyymmddfrom = eedatefrom.format('YYYYMMdd').getInfo()
     szyyyymmddtill = eedatetill.format('YYYYMMdd').getInfo()
 
+    datetime_tick_all  = datetime.datetime.now()
+
     #
-    #    logging to file - e.g: C:\tmp\geebatch_points\geebatch_points_19990101_20000101.log 
+    #    logging to file - e.g: C:\tmp\geebatch_points_19990101_20000101.log 
     #
-    szoutputbasename=os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3] + '_points_' + szyyyymmddfrom + '_' + szyyyymmddtill}")
+    szoutputbasename=os.path.join(szoutputdir, f"{os.path.basename(__file__)[0:-3]}_points_{datetime_tick_all.strftime('%Y%m%d%H%M%S')}_{szyyyymmddfrom}_{szyyyymmddtill}")
     logfilehandler = logging.FileHandler(szoutputbasename + ".log")
     logfilehandler.setFormatter(logging.Formatter('%(asctime)s %(levelname).4s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
     logging.getLogger().addHandler(logfilehandler) # (don't forget to remove it!)
-    datetime_tick_all  = datetime.datetime.now()
     try:
         #
         #    initial log
@@ -571,6 +572,7 @@ def _export_random_points(lstszproducts, szyyyyyear, szoutputdir, itreepoints, p
         cPatch = 0
         iPatch = 0
         for eepoint in itreepoints:
+            iPatch += 1
             #
             # assume global samples
             #
@@ -592,7 +594,7 @@ def _export_random_points(lstszproducts, szyyyyyear, szoutputdir, itreepoints, p
             print(f"({iPatch:5d}) - patch at ({longitude:013.8f}, {latitude:013.8f}): class({landuseclass:3d}) patches:{cPatch:5d}")
             
             #
-            #    specific output directory per land use e.g: C:\tmp\geebatch_points\PV100LC_80
+            #    specific output directory per land use e.g: C:\tmp\PV100LC_80
             #
             szfieldoutputdir = os.path.join(szoutputdir, f"PV100LC_{landuseclass}")
             if not os.path.isdir(szfieldoutputdir) : 
@@ -722,14 +724,10 @@ def demo_export_random_points():
     #
     #
     #
-    testproducts = ["S2ndvi", "S2fapar", "S2sclconvmask",  "S1sigma0"]
-    testproducts = ["s2sclstaticsmask", "s2sclclassfractions"]
-    testproducts = ["S2fapar", "S2sclcombimask", "S2sclconvmask", "S2sclstaticsmask"]
-#    szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/gee/s2sclstaticsmask_(3 8 9 10)" if IAMRUNNINGONTHEMEP else r"C:\tmp"
+    testproducts = ["S2ndvi", "S2fapar", "S2sclcombimask",  "S1sigma0"]
     szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/gee/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
-    
-    
-    szyyyyyear   = 2019    
+    szyyyyyear   = 2020 
+    maxcount     = None   
     verbose      = False    
     #
     #
@@ -738,7 +736,7 @@ def demo_export_random_points():
     geeutils.wrapasprocess(
         export_random_points,
         args=(testproducts, szyyyyyear, szoutrootdir), 
-        kwargs={'pulse':pulse, 'verbose':verbose}, 
+        kwargs={'maxcount':maxcount, 'pulse':pulse, 'verbose':verbose}, 
         timeout=3*60*60, attempts=None, pulse=pulse) # exportimages and getcollection both have a wrapretry with 127 minutes backoff total
 
 """
@@ -747,9 +745,10 @@ def demo_export_existing_points():
     #
     #
     #
-    testproducts = ["S2sclclassfractions"]
-    szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/s2sclstaticsmask_(3 8 9 10)" if IAMRUNNINGONTHEMEP else r"C:\tmp"
-    szyyyyyear   = 2019    
+    testproducts = ["S2ndvi", "S2fapar", "S2sclcombimask",  "S1sigma0"]
+    szsrcrootdir = r"/vitodata/CropSAR/tmp/dominique/gee/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
+    szdstrootdir = r"/vitodata/CropSAR/tmp/dominique/gee/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
+    szyyyyyear   = 2020    
     verbose      = False 
     #
     #
@@ -757,15 +756,15 @@ def demo_export_existing_points():
     pulse = geeutils.Pulse()
     geeutils.wrapasprocess(
         export_existing_points,
-        args=(testproducts, szyyyyyear, szoutrootdir), 
+        args=(testproducts, szyyyyyear, szsrcrootdir, szdstrootdir), 
         kwargs={'pulse':pulse, 'verbose':verbose}, 
         timeout=3*60*60, attempts=1, pulse=pulse) # no retries here! just checking for deadlocks
 """
 """
 def main():
-    #demo_export_existing_points()
+    demo_export_existing_points()
     #demo_export_random_points()
-    demo_export_point()
+    #demo_export_point()
     #demo_export_shape()
     
 """
