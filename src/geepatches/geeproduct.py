@@ -214,21 +214,29 @@ class GEECol(object):
         else:
             if verbose: print(f"{str(type(self).__name__)}.getcollection: no reference collection specified - using self")
             _eerefimagecollection = self.collect(eepoint, eedatefrom, eedatetill, verbose=verbose)
-
+        #
+        # _eerefimagecollection.size().getInfo() forces the collection to be evaluated
+        #     if this crashes during the evaluation, this might be retry-able
+        #     if the evaluation 'works', but results in an empty collection, all hope may be abandoned
+        #
+        if ( _eerefimagecollection.size().getInfo() == 0):
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: empty reference collection.")
+            raise geeutils.NoRetryEmptyCollectionException(f"{str(type(self).__name__)}.getcollection: empty reference collection.")
         #
         # find reference image - assume single band, or all bands having identical projection
         #
+        _eerefimage = geeutils.someImageNear(_eerefimagecollection, eedatefrom, eepoint).select(0)
         try:
-            _eerefimage = geeutils.someImageNear(_eerefimagecollection, eedatefrom, eepoint).select(0)
             #
-            #    this weird call is expected to throw in case no _eerefimage can be found (e.g. due to empty _eerefimagecollection)
-            #    for strange reason the _eerefimage will have type ee.Image, even if it is not there
-            #    and even then some calls will pass, while others will throw. 
+            #    this weird call is expected to throw in case no _eerefimage can be found 
+            #    (e.g. due to an actual _eerefimagecollection outside the 'someImageNear' search range)
+            #    for strange reasons the _eerefimage will have type ee.Image, even if it is not there
+            #    and even then SOME calls will pass, while others will throw. 
             #
             if (_eerefimage.bandNames().size().getInfo() > 0): pass
         except Exception as e:
             if verbose: print(f"{str(type(self).__name__)}.getcollection: no reference image found. Exception:  {str(e)}")
-            raise ValueError(f"{str(type(self).__name__)}.getcollection: no reference image found.")
+            raise geeutils.NoRetryNoImageException(f"{str(type(self).__name__)}.getcollection: no reference image found.")
         if verbose: print(f"{str(type(self).__name__)}.getcollection: selected reference image:\n{geeutils.szprojectioninfo(_eerefimage)} id:{_eerefimage.id().getInfo()}")
 
         #
@@ -278,9 +286,14 @@ class GEECol(object):
         # find native image collection
         #
         _eenatimagecollection = self.collect(_eerefroi, eedatefrom, eedatetill, verbose=verbose)
-        if _eenatimagecollection is None:
-            if verbose: print(f"{str(type(self).__name__)}.getcollection: destination collection is empty - bailing out")
-            raise ValueError(f"{str(type(self).__name__)}.getcollection: destination collection is empty.")
+        #
+        # _eenatimagecollection.size().getInfo() forces the collection to be evaluated
+        #     if this crashes during the evaluation, this might be retry-able
+        #     if the evaluation 'works', but results in an empty collection, all hope may be abandoned
+        #
+        if ( _eenatimagecollection.size().getInfo() == 0):
+            if verbose: print(f"{str(type(self).__name__)}.getcollection: empty destination collection.")
+            raise geeutils.NoRetryEmptyCollectionException(f"{str(type(self).__name__)}.getcollection: empty destination collection.")
         #
         # reproject it, to align pixel boundaries with reference roi, in resolution specified by roipixelsindiameter
         #
@@ -1298,7 +1311,9 @@ class GEECol_s2cloudlessmask(GEECol, CategoricalProjectable):
 """
 """
 class GEECol_s1sigma0(GEECol, UserProjectable):
-
+    """
+    https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S1_GRD
+    """
     def __init__(self, szband, szorbitpass):
         
         if not szband in ['VV', 'VH', 'HV', 'HH']:

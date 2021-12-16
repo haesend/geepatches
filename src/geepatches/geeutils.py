@@ -430,7 +430,12 @@ def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
     #
     if eeimagecollection.size().getInfo() <= 0:
         #
-        #    return empty collection as is to avoid weird ee.ee_exception.EEException-s
+        #    return empty collection as is to avoid weird ee.ee_exception.EEException-s 
+        #    such as "Image.select: Parameter 'input' is required." later on.
+        #
+        #    beware: "mosaictodate takes a lot of time" - is partially due to this test
+        #            since .getInfo() will force the collection to be evaluated
+        #
         #    TODO: would using ee.Algorithms.If be significant faster? one server-client swap less?
         #
         if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) empty input collection - return as-is")
@@ -606,7 +611,7 @@ class Pulse(object):
 
 def wrapasprocess(func, args=(), kwargs={}, *, timeout=5, attempts=1, pulse=None, verbose=True):
     """
-    execute a function in a child process, guard it with a timout and allow for retries.
+    execute a function in a child process, guard it with a timeout and allow for retries.
     the return value of the function (if any) itself is ignored, only the exitcode is evaluated and interpreted as
     == 0: no error, < 0: killed via some signal, > 0: some error  (Processes that raise an exception get an exitcode of 1).
     aim is not start multiple processes, but just to have some control over the launching of server tasks, accounting for 
@@ -625,7 +630,7 @@ def wrapasprocess(func, args=(), kwargs={}, *, timeout=5, attempts=1, pulse=None
     BEWARE: 
     - func must be top-level (avoid: 'Can't pickle local object' jokes).
     - "def main(): , if __name__ == '__main__': main()" idiom is a necessity, or import target from an other script.
-    - be generous with timeout. a process needs time to start up. 'spawntoprocess' was thought to operate with timeout in a magnitude of an hour.
+    - be generous with timeout. a process needs time to start up. 'wrapasprocess' was thought to operate with timeouts in a magnitude of an hour.
     
     remarks: 
     - as my multithreading experiments (task queue & worker thead) crashed and burned, I'm lead to believe that gee is not threads-safe.
@@ -714,6 +719,24 @@ def wrapasprocess(func, args=(), kwargs={}, *, timeout=5, attempts=1, pulse=None
         continues = 0
 
 
+"""
+wrapretry: 
+    retry wrapped function in case an exception is thrown
+    in 'this' implementation, targets functions containing ee-calls which occasionally fail due to hiccups, e.g.:
+        "status code(500)"
+        "Earth Engine capacity exceeded."
+        "HTTPSConnectionPool(host='earthengine.googleapis.com', port=443): Max retries exceeded..."
+        "Exception([Errno 101] Network is unreachable..."
+
+NoRetryException: 
+    base class for hierarchy of 'known' exception types for which retries are not relevant
+    can be used in the wrapped function (hence function is assumed to 'know' it might be wrapped)
+    in 'this' implementation, daughters focus on ee-specific problems (e.g. empty ee.ImageCollection's)
+"""
+class NoRetryException(Exception):                       pass
+class NoRetryEmptyCollectionException(NoRetryException): pass
+class NoRetryNoImageException(NoRetryException):         pass
+
 def wrapretry(func, args=(), kwargs={}, *, attempts=3, backoffseconds=10, backofffactor=1, verbose=False):
     """
     execute a function and allow for retries in case it throws an exception
@@ -749,7 +772,6 @@ def wrapretry(func, args=(), kwargs={}, *, attempts=3, backoffseconds=10, backof
 
     totalbackoffseconds = 0
     for attempt in range(1, attempts+1):
-
         if (attempt > 1):
             if verbose: print(f"wrapretry( {func.__name__} ) - sleep {backoffseconds} seconds before retry")
             time.sleep(backoffseconds)
@@ -762,10 +784,19 @@ def wrapretry(func, args=(), kwargs={}, *, attempts=3, backoffseconds=10, backof
             if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} SUCCESS (total backoff {totalbackoffseconds})")
             if (attempt > 1): logging.info(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} SUCCESS  (total backoff {totalbackoffseconds})")
             break
-        except TypeError  as e:
+        except NoRetryException as e:
+            #
+            # our very own exception
+            #
+            if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED (total backoff {totalbackoffseconds}) - re-raising NoRetryException({str(e)})")
+            logging.error(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED (total backoff {totalbackoffseconds}) - re-raising NoRetryException({str(e)})")
+            raise
+        except TypeError as e:
             #
             #    assuming there is no sense in retrying in case of TypeError: probably syntax fault in signature
             #
+            if verbose: print(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED (total backoff {totalbackoffseconds}) - re-raising TypeError({str(e)})")
+            logging.error(f"wrapretry( {func.__name__} ) - attempt {attempt} of {attempts} FAILED (total backoff {totalbackoffseconds}) - re-raising TypeError({str(e)})")
             raise
         except Exception as e:
             #
