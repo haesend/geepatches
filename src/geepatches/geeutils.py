@@ -403,6 +403,33 @@ def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
     BEWARE: (TODO: check if)
         result is unbounded (print(image.geometry().getInfo()) gives [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]])
     """
+    #
+    #    return (empty) collection AS-IS to avoid weird ee.ee_exception.EEException-s 
+    #    such as "Image.select: Parameter 'input' is required." later on.
+    #
+    if verbose:
+        if eeimagecollection.size().getInfo() <= 0:
+            #    beware: "mosaictodate takes a lot of time" - is partially due to this test
+            #            since .getInfo() will force the collection to be evaluated
+            #
+            #    TODO: would using ee.Algorithms.If be significant faster? one server-client swap less?
+            #
+            if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) empty input collection - return as-is")
+            return eeimagecollection
+        else:
+            return _mosaictodate(eeimagecollection, szmethod=szmethod, verbose=True)
+    #
+    #    normal (non-verbose) case: no "eeimagecollection.size().getInfo()" which seems to cost a lot of time
+    #
+    return ee.ImageCollection(ee.Algorithms.If(
+        ee.Number(eeimagecollection.size()).lte(0), 
+        eeimagecollection, 
+        _mosaictodate(eeimagecollection, szmethod=szmethod, verbose=False)))
+
+def _mosaictodate(eeimagecollection, szmethod=None, verbose=False):
+    #
+    #    szmethod's
+    #
     def _mosaicdaily_method_mosaic(eeimagecollection): return eeimagecollection.mosaic()
     def _mosaicdaily_method_mean(eeimagecollection):   return eeimagecollection.mean()
     def _mosaicdaily_method_max(eeimagecollection):    return eeimagecollection.max()
@@ -426,20 +453,24 @@ def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
         raise ValueError("szmethod must be specified as one of 'mosaic', 'mean', 'max', 'min', 'mode', 'median' or 'first'")
 
     #
+    #    obsolete since split-up in mosaictodate and _mosaictodate
     #
-    #
-    if eeimagecollection.size().getInfo() <= 0:
-        #
-        #    return empty collection as is to avoid weird ee.ee_exception.EEException-s 
-        #    such as "Image.select: Parameter 'input' is required." later on.
-        #
-        #    beware: "mosaictodate takes a lot of time" - is partially due to this test
-        #            since .getInfo() will force the collection to be evaluated
-        #
-        #    TODO: would using ee.Algorithms.If be significant faster? one server-client swap less?
-        #
-        if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) empty input collection - return as-is")
-        return eeimagecollection
+    # #
+    # #
+    # #
+    # if eeimagecollection.size().getInfo() <= 0:
+    #     #
+    #     #    return empty collection as is to avoid weird ee.ee_exception.EEException-s 
+    #     #    such as "Image.select: Parameter 'input' is required." later on.
+    #     #
+    #     #    beware: "mosaictodate takes a lot of time" - is partially due to this test
+    #     #            since .getInfo() will force the collection to be evaluated
+    #     #
+    #     #    TODO: would using ee.Algorithms.If be significant faster? one server-client swap less?
+    #     #
+    #     if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) empty input collection - return as-is")
+    #     return eeimagecollection
+
     #
     #    sort: to be sure of a reproducable collection - add day-granular 'gee_date' as property ( format('YYYY-MM-dd') takes care of 'day-granularity')
     #
