@@ -115,6 +115,10 @@ class SimpleMask:
 """
 class SimpleFilter(IColFilter):
     """
+
+    remark: 
+        mapping often result in "EEException: Too many concurrent aggregations."
+        using iterator is (expected to be) slower
     """
     def __init__(self, szclassesband, classesarray, thresholdpct):
         """
@@ -131,21 +135,24 @@ class SimpleFilter(IColFilter):
         self.eethreshold   = ee.Number(thresholdpct).abs();
         self.binvert       = True if (thresholdpct <= 0) else False; # 0 considered negative; indicating NO coverage by specified classes allowed
 
-    def filtercollection(self, eeimagecollection, eeregion, verbose=False):
+    #
+    # original implementation: pure iteration (to avoid "EEException: Too many concurrent aggregations.")
+    # hybrid implementation (below) seems to have (marginally) better performance.
+    #
+    def old_filtercollection(self, eeimagecollection, eeregion, verbose=False):
         """
         """
-
+    
         def _tagselclspct(eeimage, previouslist):
             """
             iterator function adding the coverage by the specified classes as property to the image
-            remark: mapping-attempts (iso iterator) often result in "EEException: Too many concurrent aggregations."
             """
-            
+    
             #
             # select specified (classification) band in the image 
             #
             eeallclsimage = eeimage.select(self.szband)
-
+    
             #
             # create (boolean) image of pixels of all specified classes
             #
@@ -162,7 +169,7 @@ class SimpleFilter(IColFilter):
             # for iIdx in range(self.eeclasseslist.size().getInfo()):
             #     selclass = self.eeclasseslist.get(iIdx)
             #     eeselclsimage = _maskselcls(selclass).Or(eeselclsimage)
-            
+    
             #
             # calculate (reduceRegion) the number of all pixels and of the pixels in the specified classes over the specified region
             #
@@ -176,7 +183,7 @@ class SimpleFilter(IColFilter):
                                                          'eeselclscnt', eeselclscnt, 
                                                          'eeselclspct', eeselclspct))
         #
-        # calculate coverage of specfied classes for each image in the input collection
+        # calculate coverage of specified classes for each image in the input collection
         #
         if False:
             #
@@ -192,10 +199,127 @@ class SimpleFilter(IColFilter):
                           f" - all pix: {int(ee.Number(img.get('eeallclscnt')).round().getInfo()):6d}", 
                           f" - sel pix: {int(ee.Number(img.get('eeselclscnt')).round().getInfo()):6d}",
                           f" - sel pct: {float(ee.Number(img.get('eeselclspct')).multiply(100).round().divide(100).getInfo()):6.2f}%")
-
+    
             taggedimagescoll = ee.ImageCollection.fromImages(taggedimageslist)
         else:
             taggedimagescoll = ee.ImageCollection.fromImages(eeimagecollection.iterate(_tagselclspct, ee.List([])))
+    
+        #
+        # apply threshold and return remaining images
+        #
+        if self.binvert:
+            # negative threshold was specified => considered as maximum coverage
+            return taggedimagescoll.filter(ee.Filter.lte('eeselclspct', self.eethreshold))     
+        else:
+            # positive threshold was specified => considered as minimum coverage
+            return taggedimagescoll.filter(ee.Filter.gte('eeselclspct', self.eethreshold))  
+
+
+    def filtercollection(self, eeimagecollection, eeregion, verbose=False):
+        """
+        """
+
+        #
+        #    try to prevent "EEException: Too many concurrent aggregations."
+        #    but keep some performance: hybrid implementation by iterating over max-sized-batches which are mapped.
+        #    pity the maximum allowed "concurrent aggregations" seems to be "classified information": 
+        #    - not a single straight answer in user groups.
+        #    - seems to vary in time and context
+        #    - can't find a (simple) relation between higher MAX_CONCURRENT_AGGREGATIONS and optimal performance
+        #
+        MAX_CONCURRENT_AGGREGATIONS = 10
+         
+        def _batch_tagselclspct(startindex, previouslist):
+            """
+            iterator function adding the coverage by the specified classes as property to the images
+            """
+
+            def  _tagselclspct(eeimage):
+                #
+                # select specified (classification) band in the image 
+                #
+                eeallclsimage = ee.Image(eeimage).select(self.szband)
+    
+                #
+                # create (boolean) image of pixels of all specified classes
+                #
+                def _maskselcls(selclass):
+                    #
+                    # create (boolean) image of pixels of specified class
+                    #
+                    return eeallclsimage.eq(ee.Number(selclass))
+
+                if False:
+                    #
+                    # debug @ client side
+                    #
+                    eeselclsimage = ee.Image(0)
+                    for iIdx in range(self.eeclasseslist.size().getInfo()):
+                        selclass = self.eeclasseslist.get(iIdx)
+                        eeselclsimage = _maskselcls(selclass).Or(eeselclsimage)
+                else:
+                    eeselclsimage = (ee.ImageCollection(self.eeclasseslist.map(_maskselcls))
+                                     .reduce(ee.Reducer.sum())
+                                     .setDefaultProjection(eeallclsimage.projection()))
+                
+                #
+                # calculate (reduceRegion) the number of all pixels and of the pixels in the specified classes over the specified region
+                #
+                eeallclscnt = ee.Number(eeallclsimage.reduceRegion(ee.Reducer.count().unweighted(), eeregion).values().get(0))
+                eeselclscnt = ee.Number(eeselclsimage.reduceRegion(ee.Reducer.sum().unweighted(),   eeregion).values().get(0))
+                eeselclspct = eeselclscnt.divide(eeallclscnt).multiply(100)
+                #
+                # set the results as properties of the image
+                #
+                return ee.Image(eeimage).set('eeallclscnt', eeallclscnt, 
+                                             'eeselclscnt', eeselclscnt, 
+                                             'eeselclspct', eeselclspct)
+            #
+            #
+            #
+            if False:
+                #
+                # debug @ client side
+                #
+                taggedlist = ee.List([])
+                batchlist  = eeimagecollection.toList(MAX_CONCURRENT_AGGREGATIONS, startindex)
+                if verbose:
+                    print(f"{str(type(self).__name__)}.filtercollection._batch_tagselclspct: subcollection start({startindex.getInfo()}) count({batchlist.size().getInfo()})")
+                for iIdx in range(batchlist.size().getInfo()):
+                    taggedimg = _tagselclspct(batchlist.get(iIdx))
+                    taggedlist = taggedlist.add(taggedimg)
+                return ee.List(previouslist).add(taggedlist)
+            else:
+                return ee.List(previouslist).add(eeimagecollection.toList(MAX_CONCURRENT_AGGREGATIONS, startindex).map(_tagselclspct))
+        #
+        # calculate coverage of specified classes for each image in the input collection
+        #
+        if False:
+            #
+            # debug @ client side
+            #
+            listoftaggedimagelists = ee.List([])
+            batchstartindiceslist  = ee.List.sequence(0, eeimagecollection.size(), MAX_CONCURRENT_AGGREGATIONS)
+            if verbose:
+                print(f"{str(type(self).__name__)}.filtercollection: splitting in {batchstartindiceslist.size().getInfo()} subcollections. start indices: {batchstartindiceslist.getInfo()}")
+            for iIdx in range(batchstartindiceslist.size().getInfo()):
+                listoftaggedimagelists = _batch_tagselclspct(batchstartindiceslist.get(iIdx), listoftaggedimagelists)
+                if verbose:
+                    print(f"{str(type(self).__name__)}.filtercollection: subcollections start index: {batchstartindiceslist.get(iIdx).getInfo()} - now {listoftaggedimagelists.size().getInfo()}")
+            taggedimageslist = listoftaggedimagelists.flatten()
+            
+            for iIdx in range(taggedimageslist.size().getInfo()):
+                img = ee.Image(taggedimageslist.get(iIdx))
+                if verbose:
+                    print(f"{str(type(self).__name__)}.filtercollection: img({ee.Date(img.date()).format('YYYY-MM-dd').getInfo()})",
+                          f" - all pix: {int(ee.Number(img.get('eeallclscnt')).round().getInfo()):6d}", 
+                          f" - sel pix: {int(ee.Number(img.get('eeselclscnt')).round().getInfo()):6d}",
+                          f" - sel pct: {float(ee.Number(img.get('eeselclspct')).multiply(100).round().divide(100).getInfo()):6.2f}%")
+
+            taggedimagescoll = ee.ImageCollection.fromImages(taggedimageslist)
+        else:
+            taggedimagescoll = ee.ImageCollection.fromImages(
+                ee.List(ee.List.sequence(0, eeimagecollection.size(), MAX_CONCURRENT_AGGREGATIONS).iterate(_batch_tagselclspct, ee.List([]))).flatten())
         
         #
         # apply threshold and return remaining images
