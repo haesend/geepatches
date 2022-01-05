@@ -12,7 +12,8 @@ def _assertlistofnumber(listofnumber):
     if listofnumber is None: raise ValueError("list not specified")
     try:
         for number in listofnumber:
-            if not isinstance(number, numbers.Number) : raise ValueError("non-number in list"%(str(listofnumber),))
+            if not isinstance(number, numbers.Number) : raise ValueError(f"non-number in list: {str(listofnumber)}")
+    except ValueError: raise
     except: raise ValueError("not a list")
 
 def _assertlistoflistofnumber(listoflistofnumber):
@@ -20,11 +21,13 @@ def _assertlistoflistofnumber(listoflistofnumber):
     try:
         for listofnumber in listoflistofnumber:
             _assertlistofnumber(listofnumber);
+    except ValueError: raise
     except: raise ValueError("not a list of lists")
 
 def _assertexclusive(somelist, otherlist):
     try:
         if not set(somelist).isdisjoint(otherlist) : raise ValueError("non-disjoint lists")
+    except ValueError: raise
     except: raise ValueError("not a list")
     
 
@@ -59,8 +62,6 @@ class IColFilter():
  * 
  * var s2maskcollection = s2sclImageCollection.map(SimpleMask([8,9,10]).makemask);
  * 
- * TODO: using Image.remap(...) iso iteration could be interesting
- * 
  */
 """
 class SimpleMask:
@@ -72,10 +73,16 @@ class SimpleMask:
         :param binvert: invert the mask (optional, default False)
         """
         _assertlistofnumber(s2sclclassesarray)
-        self.ees2sclclasseslist = ee.List(s2sclclassesarray).distinct()
+        s2sclclassesarray = list(dict.fromkeys(s2sclclassesarray))          # remove duplicates
+        self.ees2sclclasseslist = ee.List(s2sclclassesarray)                # ee.List([ 1, 2, 3])
+        self.eeremapclasseslist = ee.List([1]*len(s2sclclassesarray))       # ee.List([ 1, 1, 1]) - used by ee.Image.remap
         self.binvert = binvert
- 
-    def makemask(self, s2sclimage, ignoremaskimage=None):
+
+    #
+    # original implementation: using iteration
+    # new implementation (below), using remap, seems to have better performance.
+    #
+    def old_makemask(self, s2sclimage, ignoremaskimage=None):
         """
         """
         def eeiterfunction(currentiterationobject, previousreturnobject):
@@ -85,6 +92,18 @@ class SimpleMask:
             return currentreturningmaskimage
         
         maskimage = ee.Image(self.ees2sclclasseslist.iterate(eeiterfunction, ee.Image(0))) # should be 'false' image
+        if self.binvert   : maskimage = maskimage.Not()
+        if ignoremaskimage: maskimage = maskimage.And(ee.Image(ignoremaskimage).Not())
+        return (maskimage
+                    .set('system:time_start', s2sclimage.get('system:time_start'))
+                    .set('system:footprint',  s2sclimage.get('system:footprint'))
+                    .rename('SimpleMask'))
+
+
+    def makemask(self, s2sclimage, ignoremaskimage=None):
+        """
+        """
+        maskimage = s2sclimage.remap(self.ees2sclclasseslist, self.eeremapclasseslist, 0) 
         if self.binvert   : maskimage = maskimage.Not()
         if ignoremaskimage: maskimage = maskimage.And(ee.Image(ignoremaskimage).Not())
         return (maskimage
