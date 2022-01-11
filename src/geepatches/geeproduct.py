@@ -114,15 +114,20 @@ class GEECol(object):
     Until further notice we'll focus on 
     - single-band (output) products
     - with minimum periodicity of 1 day
-    
+
     GEECol <---+--- GEECol_s2ndvi
                +--- GEECol_s2fapar
                +--- GEECol_s2scl
+               +--- GEECol_s2sclsimplemask
                +--- GEECol_s2sclconvmask
-               +--- GEECol_s2rgb            (test)
+               +--- GEECol_s2sclcombimask
+               +--- GEECol_s2sclclassfractions (test: one-image-collection)
+               +--- GEECol_s2sclstaticsmask    (test: one-image-collection)
+               +--- GEECol_s2cloudlessmask     (test: using S2_CLOUD_PROBABILITY)
+               +--- GEECol_s2rgb               (test)
                +--- GEECol_s1sigma0
                +--- GEECol_s1gamma0
-               +--- GEECol_s1rvi            (test)
+               +--- GEECol_s1rvi               (test)
                +--- GEECol_pv333ndvi
                +--- GEECol_pv333sm
                +--- GEECol_pv333simplemask
@@ -182,12 +187,27 @@ class GEECol(object):
         """
         wrap _getcollection to allow some retries to avoid sporadic "ee.ee_exception.EEException: Computation timed out."
         """
-        return geeutils.wrapretry(
-            self._getcollection, 
-            args=(eedatefrom, eedatetill, eepoint, roipixelsindiameter),
-            kwargs={'refcollection':refcollection, 'refroipixelsdiameter':refroipixelsdiameter, 'doscaleandflag':doscaleandflag, 'verbose':verbose},
-            attempts=8, backoffseconds=60, backofffactor=2, verbose=verbose) # max 1 + 2 + ... + 64 = 127 minutes
-
+        try:
+            return geeutils.wrapretry(
+                self._getcollection, 
+                args=(eedatefrom, eedatetill, eepoint, roipixelsindiameter),
+                kwargs={'refcollection':refcollection, 'refroipixelsdiameter':refroipixelsdiameter, 'doscaleandflag':doscaleandflag, 'verbose':verbose},
+                attempts=8, backoffseconds=60, backofffactor=2, verbose=verbose) # max 1 + 2 + ... + 64 = 127 minutes
+        except geeutils.NoRetryException as e:
+            #
+            # arriving here is expected to indicate that some problem was explicitly caught
+            # and classified as being not-solvable by retries, e.g. attempt to collect data
+            # which does not exist in requested period or region.
+            # we'll return 'None', so client can handle as some empty collection.
+            #
+            return None
+        except:
+            #
+            # arriving here means we reached the limit of retries/backoffs. this could be caused
+            # by some bug, or due to some service or resource not being available (even after 
+            # specified retries and backoffs). hence we can only pass the exception to the client
+            #
+            raise
 
     def _getcollection(self, eedatefrom, eedatetill, eepoint, roipixelsindiameter, refcollection=None, refroipixelsdiameter=None, doscaleandflag=True, verbose=False):
         """

@@ -764,9 +764,10 @@ NoRetryException:
     can be used in the wrapped function (hence function is assumed to 'know' it might be wrapped)
     in 'this' implementation, daughters focus on ee-specific problems (e.g. empty ee.ImageCollection's)
 """
-class NoRetryException(Exception):                       pass
-class NoRetryEmptyCollectionException(NoRetryException): pass
-class NoRetryNoImageException(NoRetryException):         pass
+class NoRetryException(Exception):                         pass
+class NoRetryEmptyCollectionException(NoRetryException):   pass
+class NoRetryNoImageException(NoRetryException):           pass
+class NoRetryInvalidCollectionException(NoRetryException): pass
 
 def wrapretry(func, args=(), kwargs={}, *, attempts=3, backoffseconds=10, backofffactor=1, verbose=False):
     """

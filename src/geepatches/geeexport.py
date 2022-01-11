@@ -17,7 +17,9 @@ with ee.__version__(0.1.248):
 GEEExp.exportimages uses getDownloadURL.
 - the maximum number of bands in a file is 100 (otherwise we get: "Number of bands (xxx) must be less than or equal to 100.")
 - the maximum file size is 32MB. currently we do not check this: considering the 100 band limit, 
-  and assumption we're working on small patches this should be no problem.
+  and assumption we're working on small patches (typical <= 256 pixels roi diameter) this should be no problem:
+  - sqrt( (32 x 1024 x 1024 bytes) / (100 bands x 4byte per pixel) ) = 288 pixels roi diameter maximum
+  - and actually, error messages specify "Total request size (... bytes) must be less than or equal to 50331648 bytes." which is 48MB
 
 GEEExp.exportimagestodrive uses Export.image.toDrive, to export a multiband image, with bandnames YYYY-MM-dd
 - it is hard to find documentation about limitations; there are some questions in discussion groups, but no decent answers
@@ -57,6 +59,12 @@ class GEEExp(object):
         helper method to retrieve parameters needed for export, from the GEECol imagecollection properties:
         """
         #
+        # collection.size().getInfo() forces the collection to be evaluated
+        # if this crashes during the evaluation, this might be retry-able - hence we do nothing, 
+        # and the exception is passed on, so a retry might be triggered.
+        #
+        icollectionsize = eeimagecollection.size().getInfo()
+        #
         # retrieve properties from GEECol eeimagecollection
         #    GEECol imagecollections are supposed to have these properties available
         #    - 'gee_refroi'      : ee.Geometry - used as region parameter for exports
@@ -64,31 +72,42 @@ class GEEExp(object):
         #    - 'gee_projection'  : ee.Projection - used to shrink the exported region a little, and to find the scale parameter for exports
         #    - 'gee_description' : string - used to brew filenames for exports
         #
-        eeregion     = ee.Geometry(eeimagecollection.get('gee_refroi'))
-        eeprojection = ee.Projection(eeimagecollection.get('gee_projection'))
+        # if these are not present, there is no chance the export methods could ever run correctly,
+        # hence we'll raise a "NoRetryException" to avoid needless retries
         #
-        # everlasting war between pixel_as_surface vs pixel_as_point: 
-        #    - export seems to use 'pixel_as_point'
-        #    - our roi represents the pixel_as_surface bounding box
-        #    - rounding errors can introduce an extra row/column in our exported image
-        #    => shrinking the original roi with 10% of its own pixel size and prayer might take care of this
-        #
-        exportregion = eeregion.buffer(-0.1, proj=eeprojection)
-        exportscale  = eeprojection.nominalScale()
-        #
-        # description will be used in filenames
-        #
-        szcollectiondescription = eeimagecollection.get('gee_description').getInfo()
-        #
-        # list of band names 
-        #    normal GEECol collections are expected to be single-band
-        #    in case there are more, each band is exported separately
-        #
-        szbandnames = eeimagecollection.aggregate_array('system:band_names').flatten().distinct().getInfo()    
-        #
-        #
-        #
-        return exportregion, exportscale, szcollectiondescription, szbandnames
+        try:
+            eeregion     = ee.Geometry(eeimagecollection.get('gee_refroi'))
+            eeprojection = ee.Projection(eeimagecollection.get('gee_projection'))
+            #
+            # everlasting war between pixel_as_surface vs pixel_as_point: 
+            #    - export seems to use 'pixel_as_point'
+            #    - our roi represents the pixel_as_surface bounding box
+            #    - rounding errors can introduce an extra row/column in our exported image
+            #    => shrinking the original roi with 10% of its own pixel size and prayer might take care of this
+            #
+            exportregion = eeregion.buffer(-0.1, proj=eeprojection)
+            exportscale  = eeprojection.nominalScale()
+            #
+            # description will be used in filenames
+            #
+            szcollectiondescription = eeimagecollection.get('gee_description').getInfo()
+            #
+            # list of band names 
+            #    normal GEECol collections are expected to be single-band
+            #    in case there are more, each band is exported separately
+            #
+            szbandnames = eeimagecollection.aggregate_array('system:band_names').flatten().distinct().getInfo()    
+            #
+            #
+            #
+            return icollectionsize, exportregion, exportscale, szcollectiondescription, szbandnames
+
+        except:
+            #
+            # arriving here is expected to indicate that the collection exists somehow,
+            # but does not contain the expected properties, and cannot be exported
+            #
+            raise geeutils.NoRetryInvalidCollectionException(f"{str(type(self).__name__)}._getgeecolproperties: invalid collection.")
 
 
     #####################################################################################
@@ -207,7 +226,7 @@ class GEEExp(object):
             #
             # retrieve properties from GEECol eeimagecollection
             #
-            exportregion, exportscale, szcollectiondescription, szbandnames = self._getgeecolproperties(eeimagecollection, verbose=verbose)
+            icollectionsize, exportregion, exportscale, szcollectiondescription, szbandnames = self._getgeecolproperties(eeimagecollection, verbose=verbose)
             #
             # actual export - per band
             #    normal GEECol collections are expected to be single-banded
@@ -310,7 +329,7 @@ class GEEExp(object):
             #
             # retrieve properties from GEECol eeimagecollection
             #
-            exportregion, exportscale, szcollectiondescription, szbandnames = self._getgeecolproperties(eeimagecollection, verbose=verbose)
+            icollectionsize, exportregion, exportscale, szcollectiondescription, szbandnames = self._getgeecolproperties(eeimagecollection, verbose=verbose)
             #
             # actual export - per band
             #
@@ -465,7 +484,7 @@ class GEEExp(object):
             #
             # retrieve properties from GEECol eeimagecollection
             #
-            exportregion, exportscale, szcollectiondescription, szbandnames = self._getgeecolproperties(eeimagecollection, verbose=verbose)
+            icollectionsize, exportregion, exportscale, szcollectiondescription, szbandnames = self._getgeecolproperties(eeimagecollection, verbose=verbose)
             #
             # actual export - per band
             #    normal GEECol collections are expected to be single-banded
@@ -540,7 +559,7 @@ class GEEExp(object):
             #
             # retrieve properties from GEECol eeimagecollection
             #
-            exportregion, exportscale, szcollectiondescription, szbandnames = self._getgeecolproperties(eeimagecollection, verbose=verbose)
+            icollectionsize, exportregion, exportscale, szcollectiondescription, szbandnames = self._getgeecolproperties(eeimagecollection, verbose=verbose)
             #
             # actual export - per band
             #    normal GEECol collections are expected to be single-banded

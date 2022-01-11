@@ -87,7 +87,10 @@ class GEEExporter():
         #    using sentinel 2 20m as reference
         #
         refcol    = geeproduct.GEECol_s2scl()
-        refcolpix = 64  #128 #64
+        #
+        #    hardcoded patch size: maximum 144 (32MByte max, 100 bands per export, assume floats => 288 pixel maximum - divide by 2 for 20m vs 10m)
+        #
+        refcolpix = 64  #128 (2560 m) #64 (1280 m) 
         #
         #    heuristics for other products
         #
@@ -144,22 +147,26 @@ class GEEExporter():
     #     
     def exportimages(self, eepoint, eedatefrom, eedatetill, szoutputdir, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
-            geeexport.GEEExp().exportimages(geecollection, szoutputdir, szfilenameprefix=szfilenameprefix, verbose=verbose)
+            if geecollection:
+                geeexport.GEEExp().exportimages(geecollection, szoutputdir, szfilenameprefix=szfilenameprefix, verbose=verbose)
             if self.pulse: self.pulse.pulse()
  
     def exportimagestack(self, eepoint, eedatefrom, eedatetill, szoutputdir, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
-            geeexport.GEEExp().exportimagestack(geecollection, szoutputdir, szfilenameprefix=szfilenameprefix, verbose=verbose)
+            if geecollection:
+                geeexport.GEEExp().exportimagestack(geecollection, szoutputdir, szfilenameprefix=szfilenameprefix, verbose=verbose)
             if self.pulse: self.pulse.pulse()
  
     def exportimagestodrive(self, eepoint, eedatefrom, eedatetill, szgdrivefolder, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
-            geeexport.GEEExp().exportimagestodrive(geecollection, szgdrivefolder, szfilenameprefix=szfilenameprefix, verbose=verbose)
+            if geecollection:
+                geeexport.GEEExp().exportimagestodrive(geecollection, szgdrivefolder, szfilenameprefix=szfilenameprefix, verbose=verbose)
             if self.pulse: self.pulse.pulse()
          
     def exportimagestacktodrive(self, eepoint, eedatefrom, eedatetill, szgdrivefolder, szfilenameprefix="", verbose=False):
         for geecollection in self._getgeecollections(eedatefrom, eedatetill, eepoint, verbose=verbose):
-            geeexport.GEEExp().exportimagestacktodrive(geecollection, szgdrivefolder, szfilenameprefix=szfilenameprefix, verbose=verbose)
+            if geecollection:
+                geeexport.GEEExp().exportimagestacktodrive(geecollection, szgdrivefolder, szfilenameprefix=szfilenameprefix, verbose=verbose)
             if self.pulse: self.pulse.pulse()
 
 
@@ -628,9 +635,9 @@ def _export_random_points(lstszproducts, szyyyyyear, szoutputdir, itreepoints, p
         #
         #
         #
-        logging.warning()
+        logging.warning("")
         logging.warning(f"{os.path.basename(__file__)[0:-3]}  - unhandled exception: {str(e)}") 
-        logging.warning()
+        logging.warning("")
         raise
 
     finally:
@@ -651,28 +658,28 @@ def demo_export_point():
                     "S2cloudlessmask",
                     "S1sigma0", "S1gamma0", "S1rvi",
                     "PV333ndvi", "PV333ndvi_he", "PV333sm", "PV333smsimplemask", "PV333rgb"]
-    #testproducts = ["S2tcirgb"]
+    testproducts = ["S1sigma0"]
 
     testmethods  = ["exportimages", "exportimagestack", "exportimagestacktodrive"]
     testmethods  = ["exportimages"]
 
-    #half31UESday    = ee.Date('2020-01-29')
-    szdatefrom   = '2020-01-28'
-    szdatetill   = '2020-01-30'
-    
-    #half31UESpoint  = ee.Geometry.Point(3.56472, 50.83872) 
-    pointlon     = 3.56472
-    pointlat     = 50.83872
-
-    # #fleecycloudsday = ee.Date('2018-07-12')
-    # szdatefrom   = '2019-01-01'
-    # szdatetill   = '2020-01-01'
+    # #half31UESday    = ee.Date('2020-01-29')
+    # # szdatefrom   = '2020-01-28'
+    # # szdatetill   = '2020-01-30'
     #
-    # szdatefrom   = '2019-01-05'
-    # szdatetill   = '2019-02-01'
-    # #bobspoint       = ee.Geometry.Point(4.90782, 51.20069)
-    # pointlon     = 69.05843780
-    # pointlat     = 39.87975752
+    # szdatefrom   = '2014-01-01'
+    # szdatetill   = '2016-01-01'
+    #
+    # #half31UESpoint  = ee.Geometry.Point(3.56472, 50.83872) 
+    # pointlon     = 3.56472
+    # pointlat     = 50.83872
+
+    #fleecycloudsday = ee.Date('2018-07-12')
+    szdatefrom   = '2021-01-01'
+    szdatetill   = '2022-01-01'
+    #bobspoint       = ee.Geometry.Point(4.90782, 51.20069)
+    pointlon     = -131.35448038
+    pointlat     = 64.11052723
     
     szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
 
@@ -684,7 +691,11 @@ def demo_export_point():
     #
     #    no loop; all products & methods in one go.
     #
-    export_point(testproducts, testmethods, szdatefrom, szdatetill, pointlon, pointlat, szoutrootdir, szgdrivedir=szgdrivedir, verbose=verbose)
+    try:
+        export_point(testproducts, testmethods, szdatefrom, szdatetill, pointlon, pointlat, szoutrootdir, szgdrivedir=szgdrivedir, verbose=verbose)
+    except Exception as e:
+        print("exceptional:\n", str(e))
+        
 
 
 """
