@@ -228,63 +228,97 @@ class GEEExp(object):
             #
             icollectionsize, exportregion, exportscale, szcollectiondescription, szbandnames = self._getgeecolproperties(eeimagecollection, verbose=verbose)
             #
-            # actual export - per band
-            #    normal GEECol collections are expected to be single-banded
-            #    in case there are more, each band is exported separately
+            # normal GEECol collections are expected to be single-banded
+            # 
+            # "3-banded" collections(typical collections for debug/evalute/validate/experiment/...)
+            # are treated separately, exporting "per 3-band image"
             #
-            for szbandname in szbandnames:
-                collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
-                collectionsize = collection.size().getInfo()
+            # all other cases are exported per band (normally obsolete; the are expected to be single-banded)
+            # but by stacking them first, and using the 'file_per_band' parameter in geemap_ee_export_image
+            # we gain some performance.
+            #
+            if 3 != len(szbandnames):
+                #
+                # actual export - per band
+                #    normal GEECol collections are expected to be single-banded
+                #    in case there are more, each band is exported separately
+                #
+                for szbandname in szbandnames:
+                    collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
+                    collectionsize = collection.size().getInfo()
+                
+                    if verbose: print(f"{str(type(self).__name__)}.exportimages - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
             
-                if verbose: print(f"{str(type(self).__name__)}.exportimages - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize}")
-        
+                    #
+                    # download 
+                    #    getDownloadURL downloads a zipped GeoTIFF
+                    #    max file size for getDownloadURL is 32MB
+                    #    loop per 100 - "Number of bands (xxx) must be less than or equal to 100."
+                    #    remark: since 2014 Earth Engine has been nagging getDownloadURL should be deprecated 
+                    #
+                    offset  = 0
+                    while offset < collectionsize:
+                        eelist  = collection.toList(MAXBANDS_PERDOWNLOAD, offset)
+                        offset += MAXBANDS_PERDOWNLOAD
+                        #
+                        # stack multiple single-band images into single multi-band image 
+                        #    - exports faster than separate images
+                        #    - remark:
+                        #        Noel Gorelick doen't approve of iteration over bands; one should use ee.ImageCollection.toBands
+                        #        ee.ImageCollection.toBands uses its own band naming convention
+                        #        so we'd need yet another step to rename our bands
+                        #        besides that, worldcereal/worldcover uses similar iterations, and it works. ha!
+                        #
+                        def addimagebandstostack(nextimage, previousstack):
+                            nextimage = ee.Image(nextimage)
+                            return ee.Image(previousstack).addBands(nextimage.rename(nextimage.date().format('YYYY-MM-dd')))
+                        stackedimage = ee.Image(eelist.iterate(addimagebandstostack, ee.Image().select()))
+                        #
+                        # filenames - again
+                        #    file_per_band = True will create separate images per band, thereby appending .bandname to the filename parameter
+                        #    => files will be: szfilename.bandname.tif - bandname being 'YYYY-MM-dd'
+                        #
+                        if 1 < len(szbandnames):
+                            # multi band images collection (exceptional)
+                            szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}_{szbandname}.tif")
+                        else:
+                            # single band images collection (expected)
+                            szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}.tif")
+                        #
+                        # export it (using (local) geemap.ee_export_image (clone), which uses ee.Image.getDownloadURL)
+                        #
+                        self._geemap_ee_export_image(
+                            stackedimage,
+                            filename      = szfilename,
+                            scale         = exportscale,
+                            region        = exportregion,
+                            file_per_band = True,
+                            verbose       = verbose)
+    
+                    if verbose: print(f"{str(type(self).__name__)}.exportimages - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize} success")
+            else:
                 #
-                # download 
-                #    getDownloadURL downloads a zipped GeoTIFF
-                #    max file size for getDownloadURL is 32MB
-                #    loop per 100 - "Number of bands (xxx) must be less than or equal to 100."
-                #    remark: since 2014 Earth Engine has been nagging getDownloadURL should be deprecated 
+                # actual export - 'special' 3 band images - qgis et al. treat 3-band-images as rgb 
                 #
-                offset  = 0
-                while offset < collectionsize:
-                    eelist  = collection.toList(MAXBANDS_PERDOWNLOAD, offset)
-                    offset += MAXBANDS_PERDOWNLOAD
-                    #
-                    # stack multiple single-band images into single multi-band image 
-                    #    - exports faster than separate images
-                    #    - remark:
-                    #        Noel Gorelick doen't approve of iteration over bands; one should use ee.ImageCollection.toBands
-                    #        ee.ImageCollection.toBands uses its own band naming convention
-                    #        so we'd need yet another step to rename our bands
-                    #        besides that, worldcereal/worldcover uses similar iterations, and it works. ha!
-                    #
-                    def addimagebandstostack(nextimage, previousstack):
-                        nextimage = ee.Image(nextimage)
-                        return ee.Image(previousstack).addBands(nextimage.rename(nextimage.date().format('YYYY-MM-dd')))
-                    stackedimage = ee.Image(eelist.iterate(addimagebandstostack, ee.Image().select()))
-                    #
-                    # filenames - again
-                    #    file_per_band = True will create separate images per band, thereby appending .bandname to the filename parameter
-                    #    => files will be: szfilename.bandname.tif - bandname being 'YYYY-MM-dd'
-                    #
-                    if 1 < len(szbandnames):
-                        # multi band images collection (exceptional)
-                        szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}_{szbandname}.tif")
-                    else:
-                        # single band images collection (expected)
-                        szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}.tif")
+                if verbose: print(f"{str(type(self).__name__)}.exportimages - collection: {szcollectiondescription} as {icollectionsize} 3-band images")
+
+                eelist  = eeimagecollection.toList(icollectionsize)
+                for iIdx in range(icollectionsize):
+                    eeimage    = ee.Image(eelist.get(iIdx))
+                    szyyyymmdd = geeutils.szISO8601Date(eeimage.get('gee_date'))
+                    szfilename  = os.path.join(szoutputdir, f"{szfilenameprefix}{szcollectiondescription}.{szyyyymmdd}.tif")
                     #
                     # export it (using (local) geemap.ee_export_image (clone), which uses ee.Image.getDownloadURL)
                     #
                     self._geemap_ee_export_image(
-                        stackedimage,
+                        eeimage,
                         filename      = szfilename,
                         scale         = exportscale,
                         region        = exportregion,
-                        file_per_band = True,
+                        file_per_band = False,
                         verbose       = verbose)
-
-                if verbose: print(f"{str(type(self).__name__)}.exportimages - collection: {szcollectiondescription} band: {szbandname} images: {collectionsize} success")
+    
+                if verbose: print(f"{str(type(self).__name__)}.exportimages - collection: {szcollectiondescription} as {icollectionsize} 3-band images success")
     
         except Exception as e:
             if verbose: print(f"{str(type(self).__name__)}.exportimages - unhandled exception: {str(e)}")
@@ -489,6 +523,8 @@ class GEEExp(object):
             # actual export - per band
             #    normal GEECol collections are expected to be single-banded
             #    in case there are more, each band is exported separately
+            #
+            # __TODO: do we need the  'special' 3 band images case here too?
             #
             for szbandname in szbandnames:
                 collection     = eeimagecollection.filter(ee.Filter.listContains('system:band_names', szbandname)).select([szbandname])
