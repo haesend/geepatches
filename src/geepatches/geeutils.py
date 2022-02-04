@@ -129,21 +129,25 @@ some famous points near lichtaart, mol and elsewhere for test purposes
     ee.Geometry.Point(coords, proj)
         coords: A list of two [x,y] coordinates in the given projection
         proj: optional projection -  EPSG:4326 if unspecified.
+        e.g. ee.Geometry.Point(longitude, latitude)
 
 https://latitudelongitude.org/
 """
-bobspoint       = ee.Geometry.Point(4.90782, 51.20069)  # our favorite spot at Lichtaart
-hogerielenpoint = ee.Geometry.Point(4.93741, 51.24179)  # where we live
-tapspoint       = ee.Geometry.Point(5.07924, 51.21848)  # where we work
-pannekoekpoint  = ee.Geometry.Point(5.16577, 51.23480)  # where there are pannekoeken
-tennvenlopoint  = ee.Geometry.Point(6.19947, 51.37140)  # special 4-S2-tile point (at the tennisclub in Venlo)
-half31UESpoint  = ee.Geometry.Point(3.56472, 50.83872)  # border of S2 31UES tile on 2020-01-29
-hoogeheydepoint = ee.Geometry.Point(4.91380, 51.20715)  # point near bobspoint, 2-S1-DESC tiles edge on 2018-07-25, 2-S1-ASC tiles on 2018-07-16
-pastacosipoint  = ee.Geometry.Point(3.98940, 50.49995)  # point somwhere around Mons, 2-S1-DESC tiles edge on 2018-02-24 (about 25% of observations in 2018)
-brusselspoint   = ee.Geometry.Point(4.34878, 50.85045)  # brussels
-antwerppoint    = ee.Geometry.Point(4.40346, 51.21989)  # antwerp
+bobspoint       = ee.Geometry.Point( 4.90782, 51.20069)  # our favorite spot at Lichtaart
+hogerielenpoint = ee.Geometry.Point( 4.93741, 51.24179)  # where we live
+tapspoint       = ee.Geometry.Point( 5.07924, 51.21848)  # where we work
+pannekoekpoint  = ee.Geometry.Point( 5.16577, 51.23480)  # where there are pannekoeken
+tennvenlopoint  = ee.Geometry.Point( 6.19947, 51.37140)  # special 4-S2-tile point (at the tennisclub in Venlo)
+half31UESpoint  = ee.Geometry.Point( 3.56472, 50.83872)  # border of S2 31UES tile on 2020-01-29
+hoogeheydepoint = ee.Geometry.Point( 4.91380, 51.20715)  # point near bobspoint, 2-S1-DESC tiles edge on 2018-07-25, 2-S1-ASC tiles on 2018-07-16
+pastacosipoint  = ee.Geometry.Point( 3.98940, 50.49995)  # point somwhere around Mons, 2-S1-DESC tiles edge on 2018-02-24 (about 25% of observations in 2018)
+brusselspoint   = ee.Geometry.Point( 4.34878, 50.85045)  # brussels
+antwerppoint    = ee.Geometry.Point( 4.40346, 51.21989)  # antwerp
+snauangard      = ee.Geometry.Point(10.15508, 63.37856)  # snauan gard norway
+orenburgskaya   = ee.Geometry.Point(55.06687, 51.67971)  # klaverblad ergens in rusland (Orenburgskaya oblast)
+taminspoint     = ee.Geometry.Point( 9.40632, 46.82809)  # Tamins, Switzerland near Sankt Moritz
 
-fleecycloudsday = ee.Date('2018-07-12')                 # schapewolkjes over Belgium
+fleecycloudsday = ee.Date('2018-07-12')                 # schapenwolkjes over Belgium
 half31UESday    = ee.Date('2020-01-29')                 # S2 31UES only upper left containing data
 hoogeheydeASCday= ee.Date('2018-07-16')                 # 2-S1-ASC  tiles edge @hoogeheydepoint
 hoogeheydeDESday= ee.Date('2018-07-25')                 # 2-S1-DESC tiles edge @hoogeheydepoint

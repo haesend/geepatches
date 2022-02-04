@@ -631,6 +631,12 @@ class GEECol_s2scl(GEECol, CategoricalProjectable):
 """
 class GEECol_s2sclsimplemask(GEECol_s2scl):
     """
+    remark: 
+    - original CropSar focused on Belgium. In Belgium snow is rare.
+    - scl is not perfect. e.g. in the region of ee.Geometry.Point( 5.3564, 51.3369) there are snow-pixels (class 11) on 2018-07-12 (summer).
+    - therefore scl-snow was been masked by default.
+    - current codes continuing mission: to explore strange new places, to seek out new training and new evaluation samples, to boldly go where no CropSar has gone before.
+    - hence, we'll consider class 11 to be one of the good guys by default.
     """
     def __init__(self, s2sclclassesarray=None, binvert=None, colfilter=None):
         """
@@ -638,7 +644,8 @@ class GEECol_s2sclsimplemask(GEECol_s2scl):
         super().__init__(colfilter)
 
         if s2sclclassesarray is None:
-            s2sclclassesarray =  [2, 4, 5, 6, 7] # assuming 2,4,5,6 en 7 to be 'valid' classification classes (unlike 'volatile' clouds, saturations, snow,...)
+            #s2sclclassesarray =  [2, 4, 5, 6, 7] # assuming 2,4,5,6 en 7 to be 'valid' classification classes (unlike 'volatile' clouds, saturations, snow,...)
+            s2sclclassesarray =  [2, 4, 5, 6, 7, 11]
         if binvert is None:
             binvert = True
         
@@ -699,11 +706,12 @@ class GEECol_s2sclconvmask(GEECol_s2scl):
         super().__init__(colfilter)
 
         if lsts2sclclassesarray is None:
-            lsts2sclclassesarray =  [[2, 4, 5, 6, 7], [3, 8, 9, 10, 11]]
+            #lsts2sclclassesarray  =  [[2, 4, 5, 6, 7], [3, 8, 9, 10, 11]]
+            lsts2sclclassesarray  =  [[2, 4, 5, 6, 7, 11], [3, 8, 9, 10]]
         if lstwindowsizeinmeters is None:
             lstwindowsizeinmeters = [20*9, 20*101]
         if lstthreshold is None:
-            lstthreshold =  [-0.057, 0.025]
+            lstthreshold          = [-0.057, 0.025]
         
         self.maskmaker = geemask.ConvMask(lsts2sclclassesarray, lstwindowsizeinmeters, lstthreshold)
 
@@ -764,7 +772,8 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
                  - thresholdunits: "percentile": +/- [1,100] - mask if frequency >= percentile(threshold)    or frequency < percentile(abs(threshold))
                  - thresholdunits: "percentage": +/- [1,100] - mask if frequency >= threshold                or frequency < abs(threshold)
                                                  (using values [1,100] to avoid confusion between fractions and percentages)
-        :param statisticsareametersradius: (only for thresholdunits="sigma") specifies the region over which mean and sigma will be calculated
+        :param statisticsareametersradius: (only for thresholdunits="sigma" or "percentile") 
+                 - specifies the region over which the percentile or mean and sigma will be calculated
                  - actual area is square with radius statisticsareametersradius
                  - this area is assumed to be "large" with respect to the actual target region (in .collect)
         """
@@ -776,7 +785,8 @@ class GEECol_s2sclstaticsmask(GEECol_s2scl):
         # s2sclclassesarray
         #
         if s2sclclassesarray is None: 
-            self.s2sclclassesarray = [3,8,9,10,11]                            # default: in clouds we trust, ... and snow?
+            #self.s2sclclassesarray = [3,8,9,10,11]                            # default: in clouds we trust, ... and snow?
+            self.s2sclclassesarray = [3,8,9,10]
         else:
             if not isinstance(s2sclclassesarray, list)                        : raise ValueError("s2sclclassesarray expected to be a list")
             for number in s2sclclassesarray:
@@ -908,7 +918,8 @@ class GEECol_s2sclcombimask(GEECol_s2scl):
         #
         #
         #
-        if conv_lsts2sclclassesarray       is None: conv_lsts2sclclassesarray       = [[2, 4, 5, 6, 7], [3, 8, 9, 10, 11]]
+        #if conv_lsts2sclclassesarray       is None: conv_lsts2sclclassesarray       = [[2, 4, 5, 6, 7], [3, 8, 9, 10, 11]]
+        if conv_lsts2sclclassesarray       is None: conv_lsts2sclclassesarray       = [[2, 4, 5, 6, 7, 11], [3, 8, 9, 10]]
         if conv_lstwindowsizeinmeters      is None: conv_lstwindowsizeinmeters      = [20*9, 20*101]
         if conv_lstthreshold               is None: conv_lstthreshold               = [-0.057, 0.025] #[-0.057, 0.015]
  
@@ -916,10 +927,11 @@ class GEECol_s2sclcombimask(GEECol_s2scl):
         #
         #
         #
-        self.stat_s2sclclassesarray          = [3, 8, 9, 10, 11] if stat_s2sclclassesarray          is None else stat_s2sclclassesarray
+        #self.stat_s2sclclassesarray          = [3, 8, 9, 10, 11] if stat_s2sclclassesarray          is None else stat_s2sclclassesarray
+        self.stat_s2sclclassesarray          = [3, 8, 9, 10]     if stat_s2sclclassesarray          is None else stat_s2sclclassesarray
         self.stat_threshold                  = 2                 if stat_threshold                  is None else stat_threshold
         self.stat_thresholdunits             = "sigma"           if stat_thresholdunits             is None else "sigma"
-        self.stat_statisticsareametersradius = 25000             if stat_statisticsareametersradius is None else  stat_statisticsareametersradius
+        self.stat_statisticsareametersradius = 25000             if stat_statisticsareametersradius is None else stat_statisticsareametersradius
         self.stat_idaysbackward              = 365               if stat_idaysbackward              is None else stat_idaysbackward
         
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
@@ -1006,7 +1018,8 @@ class GEECol_s2sclclassfractions(GEECol_s2scl):
         # s2sclclassesarray
         #
         if s2sclclassesarray is None: 
-            self.s2sclclassesarray = [3,8,9,10,11]                            # default: in clouds we trust, ... and snow?
+            #self.s2sclclassesarray = [3,8,9,10,11]                            # default: in clouds we trust, ... and snow?
+            self.s2sclclassesarray = [3,8,9,10]
         else:
             if not isinstance(s2sclclassesarray, list)                        : raise ValueError("s2sclclassesarray expected to be a list")
             for number in s2sclclassesarray:
