@@ -60,11 +60,11 @@ def sanemethods(*szmethods):
     return sanemethods
 
 """
-demonstrater: exporter
+demonstrator: exporter
     hosting all export methods
     configurable for a list of products, 
     specifies S2 20m (GEECol_s2scl()) as reference collection
-    eexporting 1280m (64 pix) diameter roi's
+    exporting 1280m (64 20m-pixels) diameter roi's
 """
 class GEEExporter():
     #
@@ -593,7 +593,7 @@ def _export_random_points(lstszproducts, szyyyyyear, szoutputdir, itreepoints, p
             #
             # skip specified land use classes
             #
-            if landuseclass in lstskiplanduseclasses:
+            if landuseclass not in [50]: # lstskiplanduseclasses:
                 print(f"({iPatch:5d}) - skipping patch at ({longitude:013.8f}, {latitude:013.8f}): class({landuseclass:3d}) ")
                 continue
 
@@ -659,27 +659,28 @@ def demo_export_point():
                     "S1sigma0", "S1gamma0", "S1rvi",
                     "PV333ndvi", "PV333ndvi_he", "PV333sm", "PV333smsimplemask", "PV333rgb"]
     testproducts = ["S1sigma0"]
+    testproducts = ["S2ndvi", "S2fapar", "S2sclcombimask",  "S1sigma0", "S2scl", "S2sclstaticsmask", "S2sclclassfractions"]
 
     testmethods  = ["exportimages", "exportimagestack", "exportimagestacktodrive"]
     testmethods  = ["exportimages"]
 
-    # #half31UESday    = ee.Date('2020-01-29')
-    # # szdatefrom   = '2020-01-28'
-    # # szdatetill   = '2020-01-30'
+    #half31UESday    = ee.Date('2020-01-29')
+    szdatefrom   = '2020-01-01'
+    szdatetill   = '2021-01-01'
     #
     # szdatefrom   = '2014-01-01'
     # szdatetill   = '2016-01-01'
     #
-    # #half31UESpoint  = ee.Geometry.Point(3.56472, 50.83872) 
-    # pointlon     = 3.56472
-    # pointlat     = 50.83872
+    #half31UESpoint  = ee.Geometry.Point(3.56472, 50.83872) 
+    pointlon     = 3.56472
+    pointlat     = 50.83872
 
-    #fleecycloudsday = ee.Date('2018-07-12')
-    szdatefrom   = '2021-01-01'
-    szdatetill   = '2022-01-01'
+    # #fleecycloudsday = ee.Date('2018-07-12')
+    # szdatefrom   = '2018-01-01'
+    # szdatetill   = '2019-01-01'
     #bobspoint       = ee.Geometry.Point(4.90782, 51.20069)
-    pointlon     = -131.35448038
-    pointlat     = 64.11052723
+    pointlon     = 4.90782
+    pointlat     = 51.20069
     
     szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
 
@@ -735,7 +736,10 @@ def demo_export_random_points():
     #
     #
     #
-    testproducts = ["S2ndvi", "S2fapar", "S2sclcombimask",  "S1sigma0"]
+    testproducts = ["S2ndvi", "S2fapar", "S2sclcombimask",  "S1sigma0", "S2scl", "S2sclstaticsmask", "S2sclclassfractions"]
+    testproducts = ["S2ndvi"]
+    #testproducts = ["S2sclcombimask"]
+    #testproducts = ["S2sclconvmask"]
     szoutrootdir = r"/vitodata/CropSAR/tmp/dominique/gee/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
     szyyyyyear   = 2020 
     maxcount     = None   
@@ -743,12 +747,13 @@ def demo_export_random_points():
     #
     #
     #
-    pulse = geeutils.Pulse()
-    geeutils.wrapasprocess(
-        export_random_points,
-        args=(testproducts, szyyyyyear, szoutrootdir), 
-        kwargs={'maxcount':maxcount, 'pulse':pulse, 'verbose':verbose}, 
-        timeout=3*60*60, attempts=None, pulse=pulse) # exportimages and getcollection both have a wrapretry with 127 minutes backoff total
+    for szyyyyyear in [2019,2020,2021]:
+        pulse = geeutils.Pulse()
+        geeutils.wrapasprocess(
+            export_random_points,
+            args=(testproducts, szyyyyyear, szoutrootdir), 
+            kwargs={'maxcount':maxcount, 'pulse':pulse, 'verbose':verbose}, 
+            timeout=3*60*60, attempts=None, pulse=pulse) # exportimages and getcollection both have a wrapretry with 127 minutes backoff total
 
 """
 """
@@ -756,20 +761,26 @@ def demo_export_existing_points():
     #
     #
     #
-    testproducts = ["S2ndvi", "S2fapar", "S2sclcombimask",  "S1sigma0"]
+    testproducts = ["S2ndvi", "S2fapar", "S2sclcombimask",  "S1sigma0", "S2scl", "S2sclstaticsmask", "S2sclclassfractions"]
+    testproducts = ["S2ndvi"]
+    #testproducts = ["S2sclcombimask"]
+    #testproducts = ["S2sclconvmask"]
     szsrcrootdir = r"/vitodata/CropSAR/tmp/dominique/gee/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
     szdstrootdir = r"/vitodata/CropSAR/tmp/dominique/gee/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
-    szyyyyyear   = 2020    
+    szyyyyyear   = 2019    
     verbose      = False 
     #
     #
     #
-    pulse = geeutils.Pulse()
-    geeutils.wrapasprocess(
-        export_existing_points,
-        args=(testproducts, szyyyyyear, szsrcrootdir, szdstrootdir), 
-        kwargs={'pulse':pulse, 'verbose':verbose}, 
-        timeout=3*60*60, attempts=1, pulse=pulse) # no retries here! just checking for deadlocks
+    for testproducts in [["S2tcirgb"]]:
+        for szyyyyyear in [2019,2020,2021]:
+            pulse = geeutils.Pulse()
+            geeutils.wrapasprocess(
+                export_existing_points,
+                args=(testproducts, szyyyyyear, szsrcrootdir, szdstrootdir), 
+                kwargs={'pulse':pulse, 'verbose':verbose}, 
+                timeout=3*60*60, attempts=1, pulse=pulse) # no retries here! just checking for deadlocks
+
 """
 """
 def main():
@@ -777,7 +788,17 @@ def main():
     #demo_export_random_points()
     #demo_export_point()
     #demo_export_shape()
-    
+
+    # lstszproducts = ["S2ndvi","S2scl", "S2sclconvmask", "S2sclcombimask", "S2tcirgb", "S2sclstaticsmask"]
+    # lstszmethods  = ["exportimages"]
+    # szdatefrom    = "2020-02-01"
+    # szdatetill    = "2022-01-01"
+    # pointlon      = 9.40632
+    # pointlat      = 46.82809
+    #
+    # szoutputdir   = r"C:\tmp"
+    # export_point(lstszproducts, lstszmethods, szdatefrom, szdatetill, pointlon, pointlat, szoutputdir, szgdrivedir=None, verbose=False)
+
 """
 """    
 if __name__ == '__main__':
