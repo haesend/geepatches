@@ -13,6 +13,11 @@ import matplotlib.pyplot
 #
 #
 #
+IAMRUNNINGONTHEMEP = False
+
+#
+#
+#
 def docompare(eepoint, eedatefrom, eedatetill, szoutputdir, verbose=False):
     """
     """
@@ -220,7 +225,7 @@ def main():
         szpointlat     = f"{eepoint.coordinates().get(1).getInfo():013.8f}"
         szsubdirname   = f"Lon{szpointlon}_Lat{szpointlat}"
     
-        szoutputroot   = r"C:\tmp"
+        szoutputroot   = r"/vitodata/CropSAR/tmp/dominique/gee/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
         szoutputdir    = os.path.join(szoutputroot, szsubdirname)
         if not os.path.isdir(szoutputdir) : 
             os.mkdir(szoutputdir)
