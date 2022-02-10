@@ -426,7 +426,7 @@ def mosaictodate(eeimagecollection, szmethod=None, verbose=False):
     #    normal (non-verbose) case: no "eeimagecollection.size().getInfo()" which seems to cost a lot of time
     #
     return ee.ImageCollection(ee.Algorithms.If(
-        ee.Number(eeimagecollection.size()).lte(0), 
+        ee.Number(eeimagecollection.size()).lte(0),
         eeimagecollection, 
         _mosaictodate(eeimagecollection, szmethod=szmethod, verbose=False)))
 
@@ -456,60 +456,104 @@ def _mosaictodate(eeimagecollection, szmethod=None, verbose=False):
     else: 
         raise ValueError("szmethod must be specified as one of 'mosaic', 'mean', 'max', 'min', 'mode', 'median' or 'first'")
 
-    #
-    #    obsolete since split-up in mosaictodate and _mosaictodate
-    #
-    # #
-    # #
-    # #
-    # if eeimagecollection.size().getInfo() <= 0:
-    #     #
-    #     #    return empty collection as is to avoid weird ee.ee_exception.EEException-s 
-    #     #    such as "Image.select: Parameter 'input' is required." later on.
-    #     #
-    #     #    beware: "mosaictodate takes a lot of time" - is partially due to this test
-    #     #            since .getInfo() will force the collection to be evaluated
-    #     #
-    #     #    TODO: would using ee.Algorithms.If be significant faster? one server-client swap less?
-    #     #
-    #     if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) empty input collection - return as-is")
-    #     return eeimagecollection
+        #
+        #    previous implementation. new implementation (below) seems marginally faster (and far more impressive using these 'join's :)
+        #
+
+        #
+        # #
+        # #    obsolete since split-up in mosaictodate and _mosaictodate
+        # #
+        # # #
+        # # #
+        # # #
+        # # if eeimagecollection.size().getInfo() <= 0:
+        # #     #
+        # #     #    return empty collection as is to avoid weird ee.ee_exception.EEException-s 
+        # #     #    such as "Image.select: Parameter 'input' is required." later on.
+        # #     #
+        # #     #    beware: "mosaictodate takes a lot of time" - is partially due to this test
+        # #     #            since .getInfo() will force the collection to be evaluated
+        # #     #
+        # #     #    TODO: would using ee.Algorithms.If be significant faster? one server-client swap less?
+        # #     #
+        # #     if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) empty input collection - return as-is")
+        # #     return eeimagecollection
+        #
+        # #
+        # #    sort: to be sure of a reproducible collection - add day-granular 'gee_date' as property ( format('YYYY-MM-dd') takes care of 'day-granularity')
+        # #
+        # eeimagecollection = eeimagecollection.map(lambda image: image.set('gee_date', ee.Date(image.date().format('YYYY-MM-dd')))).sort('system:time_start')
+        # #
+        # #    map-able list of distinct dates 
+        # #
+        # eelistdistinctdates = ee.List(eeimagecollection.distinct('gee_date').aggregate_array('gee_date'))
+        # #
+        # #    reference projection from earliest image in the collection - we might be at an UTM-border 
+        # #    use first band to avoid problems in special case of multiband products with different resolutions(expected to be used for testcases only.)
+        # #
+        # eeprojectionreference = eeimagecollection.first().select(0).projection()
+        #
+        # if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) input collection: \n{szimagecollectioninfo(eeimagecollection)}")
+        #
+        # def _mosaic(eedate):
+        #     thisdate            = ee.Date(eedate)
+        #     thisdatescollection = eeimagecollection.filter(ee.Filter.date(thisdate, thisdate.advance(1,'day')))
+        #     thisdatesmosaic     = (_mosaicdaily_method_mosaic(thisdatescollection)
+        #                            .reproject(eeprojectionreference)
+        #                            .set('gee_date', thisdate.format('YYYY-MM-dd'))
+        #                            .copyProperties(thisdatescollection.first(), ['system:time_start']))
+        #     #
+        #     # should we 'keep' properties from first image? could be nice for debugging, but is ambiguous
+        #     #
+        #     # .copyProperties(thisdatescollection.first())                                      # properties from first image
+        #     # .copyProperties(thisdatescollection.first(), ['system:id', 'system:time_start'])) # including 'system:id' - ambiguous indeed
+        #
+        #     return thisdatesmosaic
+        #
+        # eeimagecollection = ee.ImageCollection(eelistdistinctdates.map(lambda eedate: _mosaic(eedate))).sort('system:time_start')
+        #
+        # if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) result collection: \n{szimagecollectioninfo(eeimagecollection)}")
+        #
+        # return eeimagecollection
 
     #
-    #    sort: to be sure of a reproducable collection - add day-granular 'gee_date' as property ( format('YYYY-MM-dd') takes care of 'day-granularity')
+    #    sort: to be sure of a reproducible collection - add day-granular 'gee_date' as property ( format('YYYY-MM-dd') takes care of 'day-granularity')
     #
-    eeimagecollection = eeimagecollection.sort('system:time_start').map(lambda image: image.set('gee_date', ee.Date(image.date().format('YYYY-MM-dd'))))
+    eeimagecollection = eeimagecollection.map(lambda image: image.set('gee_date', ee.Date(image.date().format('YYYY-MM-dd')))).sort('system:time_start')
     #
-    #    map-able list of distinct dates 
+    #    subset collection to images with distinct dates 
     #
-    eelistdistinctdates = ee.List(eeimagecollection.distinct('gee_date').aggregate_array('gee_date'))
+    eeimagecollectiondistinctdates = eeimagecollection.distinct(['gee_date'])
     #
-    #    reference projection from earliest image in the collection - we might be at an UTM-border 
+    #    add list of images with same dates as additional 'same_gee_date' property to these
+    #
+    eeimagecollectiondistinctdates = ee.Join.saveAll('same_gee_date').apply(**{
+        'primary'  : eeimagecollectiondistinctdates,
+        'secondary': eeimagecollection,
+        'condition': ee.Filter.equals(**{'leftField': 'gee_date', 'rightField': 'gee_date'})})
+    #
+    #    reference projection from earliest image in the collection - we might even be at an UTM-border 
     #    use first band to avoid problems in special case of multiband products with different resolutions(expected to be used for testcases only.)
+    #    todo: should we bring into account collections with unpredicatable bands (S1 'VV', 'VH', 'HV', 'HH' ...)
     #
     eeprojectionreference = eeimagecollection.first().select(0).projection()
     
     if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) input collection: \n{szimagecollectioninfo(eeimagecollection)}")
-   
-    def _mosaic(eedate):
-        thisdate            = ee.Date(eedate)
-        thisdatescollection = eeimagecollection.filter(ee.Filter.date(thisdate, thisdate.advance(1,'day')))
-        thisdatesmosaic     = (_mosaicdaily_method_mosaic(thisdatescollection)
-                               .reproject(eeprojectionreference)
-                               .set('gee_date', thisdate.format('YYYY-MM-dd'))
-                               .copyProperties(thisdatescollection.first(), ['system:time_start']))
-        #
-        # should we 'keep' properties from first image? could be nice for debugging, but is ambiguous
-        #
-        # .copyProperties(thisdatescollection.first())                                      # properties from first image
-        # .copyProperties(thisdatescollection.first(), ['system:id', 'system:time_start'])) # including 'system:id' - ambiguous indeed
+    #
+    #    actual mosaic
+    #
+    def _mosaic(eeimagedistinctdate):
+        samegeedatecollection  = ee.ImageCollection.fromImages(eeimagedistinctdate.get('same_gee_date'))
+        samegeedatemosaicimage = (_mosaicdaily_method_mosaic(samegeedatecollection)
+                                  .reproject(eeprojectionreference)
+                                  .copyProperties(eeimagedistinctdate, ['system:time_start', 'gee_date']))
+        return samegeedatemosaicimage
 
-        return thisdatesmosaic
-
-    eeimagecollection = ee.ImageCollection(eelistdistinctdates.map(lambda eedate: _mosaic(eedate)))
+    eeimagecollection = ee.ImageCollection(eeimagecollectiondistinctdates.map(_mosaic)).sort('system:time_start')
 
     if verbose: print(f"{pathlib.Path(__file__).stem}:mosaictodate ({szmethod}) result collection: \n{szimagecollectioninfo(eeimagecollection)}")
-    
+ 
     return eeimagecollection
 
     
