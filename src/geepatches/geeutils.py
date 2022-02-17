@@ -520,7 +520,7 @@ def _mosaictodate(eeimagecollection, szmethod=None, verbose=False):
     #
     #    sort: to be sure of a reproducible collection - add day-granular 'gee_date' as property ( format('YYYY-MM-dd') takes care of 'day-granularity')
     #
-    eeimagecollection = eeimagecollection.map(lambda image: image.set('gee_date', ee.Date(image.date().format('YYYY-MM-dd')))).sort('system:time_start')
+    eeimagecollection = eeimagecollection.map(lambda image: image.set('gee_date', ee.Date(image.date()).format('YYYY-MM-dd'))).sort('system:time_start')
     #
     #    subset collection to images with distinct dates 
     #
@@ -931,7 +931,7 @@ def szimagecollectioninfo(eeimagecollection, verbose=True):
     else:
         eeimagecollection = (eeimagecollection
                              .sort('system:time_start')
-                             .map(lambda image: image.set('gee_date', ee.Date(image.date().format('YYYY-MM-dd')))))
+                             .map(lambda image: image.set('gee_date', ee.Date(image.date()).format('YYYY-MM-dd'))))
         sz += f" from: {eeimagecollection.limit(1, 'system:time_start', True).first().date().format('YYYY-MM-dd').getInfo()}"
         sz += f" till: {eeimagecollection.limit(1, 'system:time_start', False).first().date().format('YYYY-MM-dd').getInfo()}"
         sz += f" unique dates: {eeimagecollection.distinct('gee_date').size().getInfo()}"
@@ -972,9 +972,9 @@ def szimagesperdateinfo(eeimagecollection):
     count number of images per date in collection
     """
     #
-    #    sort: to be sure of a reproducable collection - add day-granular 'gee_date' as property ( format('YYYY-MM-dd') takes care of 'day-granularity')
+    #    sort: to be sure of a reproducible collection - add day-granular 'gee_date' as property ( format('YYYY-MM-dd') takes care of 'day-granularity')
     #
-    eeimagecollection = eeimagecollection.sort('system:time_start').map(lambda image: image.set('gee_date', ee.Date(image.date().format('YYYY-MM-dd'))))
+    eeimagecollection = eeimagecollection.sort('system:time_start').map(lambda image: image.set('gee_date', ee.Date(image.date()).format('YYYY-MM-dd')))
     #
     #    map-able list of distinct dates 
     #
