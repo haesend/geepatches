@@ -1347,7 +1347,7 @@ class GEECol_s1sigma0(GEECol, UserProjectable):
     """
     https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S1_GRD
     """
-    def __init__(self, szband, szorbitpass):
+    def __init__(self, szband, szorbitpass, szplatformnumber=None):
         
         if not szband in ['VV', 'VH', 'HV', 'HH']:
             raise ValueError("band must be specified as one of 'VV', 'VH', 'HV', 'HH'")
@@ -1359,6 +1359,14 @@ class GEECol_s1sigma0(GEECol, UserProjectable):
         if szorbitpass == 'DES': szorbitpass = 'DESCENDING'
         self.szorbitpass = szorbitpass
 
+        #
+        #    default = all platforms. possible to choose explicitly 'A' or 'B'
+        #
+        if szplatformnumber is not None:
+            if not szplatformnumber in ['A', 'B']:
+                raise ValueError("platformnumber -if specified- must be one of 'A' or 'B'")
+        self.szplatformnumber = szplatformnumber
+
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
         #    base collection - limited to single band & single orbit direction
@@ -1369,6 +1377,11 @@ class GEECol_s1sigma0(GEECol, UserProjectable):
                              .filter(ee.Filter.eq('orbitProperties_pass', self.szorbitpass))
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #    just the selected platform -if specified-
+        #
+        if self.szplatformnumber is not None: 
+            eeimagecollection = eeimagecollection.filter(ee.Filter.eq('platform_number', self.szplatformnumber))
         #
         #    just the selected band
         #
@@ -1385,7 +1398,7 @@ class GEECol_s1sigma0(GEECol, UserProjectable):
         #
         #    add collection properties describing this collection - S1, as always, being something special
         #       
-        eeimagecollection = eeimagecollection.set('gee_description', 'S1sigma0_' + self.szband + '_' + self.szorbitpass[0:3])
+        eeimagecollection = eeimagecollection.set('gee_description', 'S1' + ("" if self.szplatformnumber is None else str(self.szplatformnumber)) + 'sigma0_' + self.szband + '_' + self.szorbitpass[0:3])
         #
         #
         #
@@ -1420,8 +1433,8 @@ class GEECol_s1sigma0(GEECol, UserProjectable):
 """
 class GEECol_s1gamma0(GEECol_s1sigma0):
 
-    def __init__(self, szband, szorbitpass):
-        super().__init__(szband, szorbitpass)
+    def __init__(self, szband, szorbitpass, szplatformnumber=None):
+        super().__init__(szband, szorbitpass, szplatformnumber=szplatformnumber)
 
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
@@ -1435,6 +1448,11 @@ class GEECol_s1gamma0(GEECol_s1sigma0):
                              .filter(ee.Filter.eq('orbitProperties_pass', self.szorbitpass))
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #    just the selected platform -if specified-
+        #
+        if self.szplatformnumber is not None: 
+            eeimagecollection = eeimagecollection.filter(ee.Filter.eq('platform_number', self.szplatformnumber))
         #
         #    gamma = f(sigma)
         #
@@ -1456,7 +1474,7 @@ class GEECol_s1gamma0(GEECol_s1sigma0):
         #
         #    add collection properties describing this collection - S1, as always, being something special
         #       
-        eeimagecollection = eeimagecollection.set('gee_description', 'S1gamma0_' + self.szband + '_' + self.szorbitpass[0:3])
+        eeimagecollection = eeimagecollection.set('gee_description', 'S1' + ("" if self.szplatformnumber is None else str(self.szplatformnumber)) + 'gamma0_' + self.szband + '_' + self.szorbitpass[0:3])
         #
         #
         #
@@ -1478,13 +1496,20 @@ class GEECol_s1rvi(GEECol, OrdinalProjectable):
     experimental - just for the fun of it (to play with S1_GRD_FLOAT collection)
     """
 
-    def __init__(self, szorbitpass):
+    def __init__(self, szorbitpass, szplatformnumber=None):
         
         if not szorbitpass in ['ASC', 'ASCENDING', 'DES', 'DESCENDING']:
             raise ValueError("orbitpass must be specified as one of 'ASCENDING'(or 'ASC'), 'DESCENDING'(or 'DES')")
         if szorbitpass == 'ASC': szorbitpass = 'ASCENDING'
         if szorbitpass == 'DES': szorbitpass = 'DESCENDING'
         self.szorbitpass = szorbitpass
+        #
+        #    default = all platforms. possible to choose explicitly 'A' or 'B'
+        #
+        if szplatformnumber is not None:
+            if not szplatformnumber in ['A', 'B']:
+                raise ValueError("platformnumber -if specified- must be one of 'A' or 'B'")
+        self.szplatformnumber = szplatformnumber
         
     def collect(self, eeroi, eedatefrom, eedatetill, verbose=False):
         #
@@ -1497,6 +1522,11 @@ class GEECol_s1rvi(GEECol, OrdinalProjectable):
                              .filter(ee.Filter.eq('orbitProperties_pass', self.szorbitpass))
                              .filterBounds(eeroi)
                              .filter(ee.Filter.date(eedatefrom, eedatetill)))
+        #
+        #    just the selected platform -if specified-
+        #
+        if self.szplatformnumber is not None: 
+            eeimagecollection = eeimagecollection.filter(ee.Filter.eq('platform_number', self.szplatformnumber))
         #
         #    apply rvi = 4 x VH / (VV + VH)
         #
@@ -1513,7 +1543,7 @@ class GEECol_s1rvi(GEECol, OrdinalProjectable):
         #
         #    add collection properties describing this collection
         #       
-        eeimagecollection = eeimagecollection.set('gee_description', 'S1rvi_' + self.szorbitpass[0:3])
+        eeimagecollection = eeimagecollection.set('gee_description', 'S1' + ("" if self.szplatformnumber is None else str(self.szplatformnumber)) + 'rvi_' + self.szorbitpass[0:3])
         #
         #
         #
