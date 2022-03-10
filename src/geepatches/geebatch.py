@@ -13,10 +13,16 @@ import geeexport
 
 
 
+
 #
 #
 #
 IAMRUNNINGONTHEMEP = False
+#
+#
+#
+DO_S1_ALL_PLATFORMS      = True
+DO_S1_SEPARATE_PLATFORMS = False
 
 #
 #    available products
@@ -106,6 +112,10 @@ class GEEExporter():
         #
         #    generator
         #
+        
+        #
+        #    S2
+        #
         if "S2ndvi"              in self.szproducts: yield geeproduct.GEECol_s2ndvi(colfilter=s2f).getcollection(             eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
         if "S2ndvi_he"           in self.szproducts: yield geeproduct.GEECol_s2ndvi_he(colfilter=s2f).getcollection(          eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
         if "S2fapar"             in self.szproducts: yield geeproduct.GEECol_s2fapar(colfilter=s2f).getcollection(            eedatefrom, eedatetill, eepoint, s2_10m_pix, refcol, refcolpix, verbose=verbose)
@@ -125,14 +135,48 @@ class GEEExporter():
 
         if "S2cloudlessmask"     in self.szproducts: yield geeproduct.GEECol_s2cloudlessmask(colfilter=s2f).getcollection(    eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
 
-        if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        #
+        #    S1
+        #
+        if DO_S1_ALL_PLATFORMS:
+            #
+            #    all S1 platforms
+            #
+            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+
+            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+
+        if DO_S1_SEPARATE_PLATFORMS:
+            #
+            #    S1A and S1B separate
+            #
+            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'DES', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'DES', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+
+            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'ASC', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'ASC', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+
+        #
+        #    misc
+        #
         if "S1rvi"               in self.szproducts: yield geeproduct.GEECol_s1rvi('ASC').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
         if "S1rvi"               in self.szproducts: yield geeproduct.GEECol_s1rvi('DES').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
          
