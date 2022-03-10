@@ -35,6 +35,7 @@ def docompare(eepoint, eedatefrom, eedatetill, szoutputdir, verbose=False):
     
     s2ndvi            = geeproduct.GEECol_s2ndvi(s2sclcppfilter) # ndvi as index of interest
     s2rgb             = geeproduct.GEECol_s2rgb(s2sclcppfilter)  # rbb images to be exported as verification
+    s2scl             = geeproduct.GEECol_s2scl(s2sclcppfilter)
 
     #
     # considering a combi-mask which considers 'snow' as 'valid' class
@@ -78,7 +79,7 @@ def docompare(eepoint, eedatefrom, eedatetill, szoutputdir, verbose=False):
     #
     if szoutputdir:
         
-        s2sclcollection =  refcol.getcollection(eedatefrom, eedatetill, eepoint, refcolpix,                      verbose=verbose)
+        s2sclcollection =  s2scl.getcollection(eedatefrom, eedatetill, eepoint, refcolpix,                       verbose=verbose)
         s2rgbcollection =  s2rgb.getcollection (eedatefrom, eedatetill, eepoint, refcolpix*2, refcol, refcolpix, verbose=verbose)
 
         geeexport.GEEExp().exportimages(s2sclcollection,    szoutputdir, szfilenameprefix="",           verbose=verbose)
@@ -224,13 +225,15 @@ def main():
         szpointlon     = f"{eepoint.coordinates().get(0).getInfo():013.8f}"
         szpointlat     = f"{eepoint.coordinates().get(1).getInfo():013.8f}"
         szsubdirname   = f"Lon{szpointlon}_Lat{szpointlat}"
-    
-        szoutputroot   = r"/vitodata/CropSAR/tmp/dominique/gee/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
-        szoutputdir    = os.path.join(szoutputroot, szsubdirname)
-        if not os.path.isdir(szoutputdir) : 
-            os.mkdir(szoutputdir)
-            if not os.path.isdir(szoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
-            os.chmod(szoutputdir, 0o777)
+        
+        szoutputdir = None
+        if False:
+            szoutputroot   = r"/vitodata/CropSAR/tmp/dominique/gee/tmp" if IAMRUNNINGONTHEMEP else r"C:\tmp"
+            szoutputdir    = os.path.join(szoutputroot, szsubdirname)
+            if not os.path.isdir(szoutputdir) : 
+                os.mkdir(szoutputdir)
+                if not os.path.isdir(szoutputdir) : raise ValueError(f"could not create szoutputdir ({str(szoutputdir)})")
+                os.chmod(szoutputdir, 0o777)
         #
         #    get some work done.
         #
