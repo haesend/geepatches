@@ -431,9 +431,10 @@ def parcels1dataframe(szparceldirpath,
     if szparcelcsvdirpath:
         if not os.path.isdir(szparcelcsvdirpath) : raise ValueError(f"invalid szparcelcsvdirpath ({str(szparcelcsvdirpath)})")  # root must exist
         szcsvfile = os.path.join(szparcelcsvdirpath, "S1data.csv")
-        parceldataframe.to_csv(szcsvfile)
+        parceldataframe.astype(numpy.float16).to_csv(szcsvfile) # save some space with float16
         if verbose: logging.info(f"parcels1dataframe({szparcelproddescription}): csv file: {os.path.basename(szcsvfile)}")
-
+    
+    return parceldataframe
 
 #
 #
@@ -487,8 +488,10 @@ def parcels2dataframe(szparceldirpath,
     if szparcelcsvdirpath:
         if not os.path.isdir(szparcelcsvdirpath) : raise ValueError(f"invalid szparcelcsvdirpath ({str(szparcelcsvdirpath)})")  # root must exist
         szcsvfile = os.path.join(szparcelcsvdirpath, "S2data.csv")
-        parceldataframe.to_csv(szcsvfile)
+        parceldataframe.astype(numpy.float16).to_csv(szcsvfile) # save some space with float16
         if verbose: logging.info(f"parcels2dataframe({szparcelproddescription}): csv file: {os.path.basename(szcsvfile)}")
+    
+    return parceldataframe
 
 #
 #
