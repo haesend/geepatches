@@ -18,11 +18,6 @@ import geeexport
 #
 #
 IAMRUNNINGONTHEMEP = False
-#
-#
-#
-DO_S1_ALL_PLATFORMS      = True
-DO_S1_SEPARATE_PLATFORMS = False
 
 #
 #    available products
@@ -30,40 +25,16 @@ DO_S1_SEPARATE_PLATFORMS = False
 EXPORTABLEPRODUCTS = ["S2ndvi", "S2ndvi_he", "S2fapar", "S2fapar_he", "S2tcirgb",
                       "S2scl", "S2sclsimplemask", "S2sclconvmask", "S2sclcombimask", "S2sclstaticsmask", "S2sclclassfractions",
                       "S2cloudlessmask",
-                      "S1sigma0", "S1gamma0", "S1rvi",
+                      "S1sigma0",  "S1gamma0",  "S1rvi",
+                      "S1Asigma0", "S1Agamma0", "S1Arvi",
+                      "S1Bsigma0", "S1Bgamma0", "S1Brvi",
                       "PV333ndvi", "PV333ndvi_he", "PV333sm", "PV333smsimplemask", "PV333rgb"]
 #
 #    available methods
 #
 EXPORTMETHODS = ["exportimages", "exportimagestack", "exportimagestodrive", "exportimagestacktodrive"]
 
-#
-#    sanity check products - playing with variable-length arguments
-#
-def saneproducts(*szproducts):
-    assert (0 < len(szproducts)), "no product specified"                         # at least one product
-    if (len(szproducts) == 1) and (isinstance(szproducts[0], (list, tuple))):    # unpack explicit lists or tuples
-        szproducts = szproducts[0]
-    saneproducts = []
-    for szproduct in list(szproducts):                                           # only known products
-        assert (szproduct in EXPORTABLEPRODUCTS), f"invalid product specified '{szproduct}'" 
-        if szproduct not in saneproducts:                                        # no duplicates
-            saneproducts.append(szproduct)
-    return saneproducts
 
-#
-#    sanity check methods
-#
-def sanemethods(*szmethods):
-    assert (0 < len(szmethods)), "no method specified"                         # at least one product
-    if (len(szmethods) == 1) and (isinstance(szmethods[0], (list, tuple))):    # unpack explicit lists or tuples
-        szmethods = szmethods[0]
-    sanemethods = []
-    for szmethod in list(szmethods):                                           # only known products
-        assert (szmethod in EXPORTMETHODS), f"invalid method specified '{szmethod}'" 
-        if szmethod not in sanemethods:                                        # no duplicates
-            sanemethods.append(szmethod)
-    return sanemethods
 
 """
 demonstrator: exporter
@@ -74,13 +45,42 @@ demonstrator: exporter
 """
 class GEEExporter():
     #
+    #    sanity check products - playing with variable-length arguments
+    #
+    @staticmethod
+    def saneproducts(*szproducts):
+        assert (0 < len(szproducts)), "no product specified"                         # at least one product
+        if (len(szproducts) == 1) and (isinstance(szproducts[0], (list, tuple))):    # unpack explicit lists or tuples
+            szproducts = szproducts[0]
+        saneproducts = []
+        for szproduct in list(szproducts):                                           # only known products
+            assert (szproduct in EXPORTABLEPRODUCTS), f"invalid product specified '{szproduct}'" 
+            if szproduct not in saneproducts:                                        # no duplicates
+                saneproducts.append(szproduct)
+        assert (0 < len(saneproducts)), "no product specified"                       # at least one product
+        return saneproducts
+    #
+    #    sanity check methods
+    #
+    @staticmethod
+    def sanemethods(*szmethods):
+        assert (0 < len(szmethods)), "no method specified"                         # at least one product
+        if (len(szmethods) == 1) and (isinstance(szmethods[0], (list, tuple))):    # unpack explicit lists or tuples
+            szmethods = szmethods[0]
+        sanemethods = []
+        for szmethod in list(szmethods):                                           # only known products
+            assert (szmethod in EXPORTMETHODS), f"invalid method specified '{szmethod}'" 
+            if szmethod not in sanemethods:                                        # no duplicates
+                sanemethods.append(szmethod)
+        return sanemethods
+    #
     #
     #
     def __init__(self, *szproducts, pulse=None):
         """
         e.g. exporter = GEEExporter("S2ndvi", "S1sigma0")
         """
-        self.szproducts = saneproducts(*szproducts)
+        self.szproducts = GEEExporter.saneproducts(*szproducts)
         self.pulse      = pulse
     #
     #
@@ -136,50 +136,49 @@ class GEEExporter():
         if "S2cloudlessmask"     in self.szproducts: yield geeproduct.GEECol_s2cloudlessmask(colfilter=s2f).getcollection(    eedatefrom, eedatetill, eepoint, s2_20m_pix, refcol, refcolpix, verbose=verbose)
 
         #
-        #    S1
+        #    S1 - all S1 platforms
         #
-        if DO_S1_ALL_PLATFORMS:
-            #
-            #    all S1 platforms
-            #
-            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
 
-            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
 
-        if DO_S1_SEPARATE_PLATFORMS:
-            #
-            #    S1A and S1B separate
-            #
-            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'DES', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1sigma0"            in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'DES', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1rvi"               in self.szproducts: yield geeproduct.GEECol_s1rvi('ASC').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1rvi"               in self.szproducts: yield geeproduct.GEECol_s1rvi('DES').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        #
+        #    S1 - S1A and S1B separate
+        #
+        if "S1Asigma0"           in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Asigma0"           in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Asigma0"           in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Asigma0"           in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'DES', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Bsigma0"           in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'ASC', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Bsigma0"           in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'ASC', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Bsigma0"           in self.szproducts: yield geeproduct.GEECol_s1sigma0('VV', 'DES', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Bsigma0"           in self.szproducts: yield geeproduct.GEECol_s1sigma0('VH', 'DES', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
 
-            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'ASC', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'ASC', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-            if "S1gamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Agamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'ASC', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Agamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Agamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Agamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES', 'A').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Bgamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'ASC', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Bgamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'ASC', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Bgamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VV', 'DES', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Bgamma0"            in self.szproducts: yield geeproduct.GEECol_s1gamma0('VH', 'DES', 'B').getcollection(eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+
+        if "S1Arvi"               in self.szproducts: yield geeproduct.GEECol_s1rvi('ASC', 'A').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Arvi"               in self.szproducts: yield geeproduct.GEECol_s1rvi('DES', 'A').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Brvi"               in self.szproducts: yield geeproduct.GEECol_s1rvi('ASC', 'B').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
+        if "S1Brvi"               in self.szproducts: yield geeproduct.GEECol_s1rvi('DES', 'B').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
 
         #
         #    misc
         #
-        if "S1rvi"               in self.szproducts: yield geeproduct.GEECol_s1rvi('ASC').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-        if "S1rvi"               in self.szproducts: yield geeproduct.GEECol_s1rvi('DES').getcollection(         eedatefrom, eedatetill, eepoint, s1_10m_pix, refcol, refcolpix, verbose=verbose)
-         
         if "PV333ndvi"           in self.szproducts: yield geeproduct.GEECol_pv333ndvi(colfilter=pvf).getcollection(          eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
         if "PV333ndvi_he"        in self.szproducts: yield geeproduct.GEECol_pv333ndvi_he(colfilter=pvf).getcollection(       eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
         if "PV333sm"             in self.szproducts: yield geeproduct.GEECol_pv333sm(colfilter=pvf).getcollection(            eedatefrom, eedatetill, eepoint, pv333m_pix, refcol, refcolpix, verbose=verbose)
@@ -229,8 +228,8 @@ def export_point(lstszproducts, lstszmethods, szdatefrom, szdatetill, pointlon, 
     #
     #
     #
-    lstszproducts  = saneproducts(lstszproducts)
-    lstszmethods   = sanemethods(lstszmethods)
+    lstszproducts  = GEEExporter.saneproducts(lstszproducts)
+    lstszmethods   = GEEExporter.sanemethods(lstszmethods)
     exporter       = GEEExporter(*lstszproducts)
     eedatefrom     = ee.Date(szdatefrom)
     eedatetill     = ee.Date(szdatetill)
@@ -346,8 +345,8 @@ def export_shape(lstszproducts, lstszmethods, szyyyyyear, szshapefile, szoutputd
     #
     #    check products and methods
     #
-    lstszproducts = saneproducts(lstszproducts)
-    lstszmethods  = sanemethods(lstszmethods)
+    lstszproducts = GEEExporter.saneproducts(lstszproducts)
+    lstszmethods  = GEEExporter.sanemethods(lstszmethods)
     exporter      = GEEExporter(*lstszproducts)
     eedatefrom    = ee.Date(szyyyymmddfrom)
     eedatetill    = ee.Date(szyyyymmddtill)
@@ -574,7 +573,7 @@ def _export_random_points(lstszproducts, szyyyyyear, szoutputdir, itreepoints, p
     #
     szyyyymmddfrom = str(int(szyyyyyear)    )  + "-01-01"  # assume per calendar year
     szyyyymmddtill = str(int(szyyyyyear) + 1)  + "-01-01"
-    lstszproducts  = saneproducts(lstszproducts)
+    lstszproducts  = GEEExporter.saneproducts(lstszproducts)
     exporter       = GEEExporter(*lstszproducts, pulse=pulse)
     eedatefrom     = ee.Date(szyyyymmddfrom)
     eedatetill     = ee.Date(szyyyymmddtill)
