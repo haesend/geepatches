@@ -1137,13 +1137,35 @@ def szgeometryinfo(eegeometry, verbose=True):
     """
     wip
     """
-    if isinstance(eegeometry, ee.Image): eegeometry = eegeometry.geometry()
+    if isinstance(eegeometry, ee.Image):
+        #
+        # beware: 
+        #    https://groups.google.com/g/google-earth-engine-developers/c/5EzP6slsRQE/m/_cHjCcjOAwAJ
+        #    "the footprints (where geometry() comes from) are pre-generated in EWPSG:4326 coordinates, 
+        #    using up to 20 points (and note, they're only approximate because of masked pixels, 
+        #    curvature of the earth, etc)." - Noel Gorelick
+        #
+        #     however: I have often found more points than 20 with eeimage.geometry and or eeimage.get('system:footprint')
+        #
+        #    https://groups.google.com/g/google-earth-engine-developers/c/TdVbg9aN7lo/m/ASzAcaYGY4gJ
+        #    "Your problem is that you're using system:footprint for a geometry.  That's not ok.
+        #    system:footprint is a linearRing, essentially just a 4-point line.  That line doesn't
+        #    intersect any pixels, ... You should be using image.geometry() instead." - Noel Gorelick
+        #
+        #      => eeimage.get('system:footprint') and image.geometry() are NOT completely equal.
+        #
+        eegeometry = eegeometry.geometry()
     sz  = ''
     sz += f" geometry type: {eegeometry.type().getInfo()}"
-    #sz += f" - perimeter: {eegeometry.perimeter(maxError=0.001).getInfo()}"
-    #sz += f" - area: {eegeometry.area(maxError=0.001).getInfo()}"
+    sz += f" - geodesic: {eegeometry.geodesic().getInfo()}"
+    sz += f" - unbounded: {eegeometry.isUnbounded().getInfo()}"
     #
-    #    type(eegeometry.coordinates()) -> ee.List
+    #    LinearRing can occur as footprint, but has no area nor perimeter - however, we should be able to make a polygon out of it... pray and run
+    #
+    if (eegeometry.type().getInfo() == "LinearRing"):
+        eegeometry = ee.Geometry.Polygon(eegeometry.coordinates(), proj=eegeometry.projection(), geodesic=eegeometry.geodesic(), maxError=0.001)
+    #
+    #
     #
     if (eegeometry.type().getInfo() == "Point"):
         #
